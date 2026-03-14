@@ -4,45 +4,26 @@ import { useState, useEffect, useCallback } from "react";
 import { BoundaryTreeTable } from "@/components/dashboard/BoundaryTreeTable";
 import { LcpCriticalPath } from "@/components/dashboard/LcpCriticalPath";
 import { LoadGenerator } from "@/components/dashboard/LoadGenerator";
-import type {
-  BoundaryMetric,
-  FetchMetric,
-  QueryMetric,
-  SubgraphOperationMetric,
-} from "@/lib/metrics-store";
-
-interface MetricsResponse {
-  boundaries: BoundaryMetric[];
-  fetches: FetchMetric[];
-  queries: QueryMetric[];
-  subgraphOps: SubgraphOperationMetric[];
-  totalPageLoads: number;
-}
+import { clientMetricsStore, type ClientMetrics } from "@/lib/client-metrics-store";
 
 const PERCENTILE_OPTIONS = [50, 75, 90, 95, 99] as const;
 
 export default function DashboardPage() {
-  const [metrics, setMetrics] = useState<MetricsResponse | null>(null);
+  const [metrics, setMetrics] = useState<ClientMetrics | null>(null);
   const [activeTab, setActiveTab] = useState<"tree" | "lcp">("tree");
   const [loading, setLoading] = useState(true);
   const [pctl, setPctl] = useState<number>(99);
 
-  const fetchMetrics = useCallback(async () => {
+  const refreshMetrics = useCallback(() => {
     setLoading(true);
-    try {
-      const res = await fetch("/api/metrics");
-      const data = await res.json();
-      setMetrics(data);
-    } catch {
-      // silently fail
-    } finally {
-      setLoading(false);
-    }
+    const data = clientMetricsStore.getMetrics();
+    setMetrics(data);
+    setLoading(false);
   }, []);
 
   useEffect(() => {
-    fetchMetrics();
-  }, [fetchMetrics]);
+    refreshMetrics();
+  }, [refreshMetrics]);
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 p-6 font-mono">
@@ -59,7 +40,7 @@ export default function DashboardPage() {
             </p>
           </div>
           <button
-            onClick={fetchMetrics}
+            onClick={refreshMetrics}
             className="px-3 py-1.5 text-sm border border-zinc-700 rounded text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 transition-colors"
           >
             Refresh
@@ -67,7 +48,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Load Generator */}
-        <LoadGenerator onComplete={fetchMetrics} />
+        <LoadGenerator onComplete={refreshMetrics} />
 
         {/* Tab navigation + percentile selector */}
         <div className="flex items-center justify-between border-b border-zinc-800">
@@ -114,6 +95,17 @@ export default function DashboardPage() {
           {loading && !metrics ? (
             <div className="text-center py-12 text-zinc-500 animate-pulse">
               Loading metrics...
+            </div>
+          ) : metrics && metrics.totalPageLoads === 0 ? (
+            <div className="text-center py-12 text-zinc-500">
+              <p>No metrics data yet.</p>
+              <p className="text-sm mt-2">
+                Click <span className="text-blue-400">Generate Load</span> above to fire requests
+                to the product page and collect performance metrics.
+              </p>
+              <p className="text-xs mt-1 text-zinc-600">
+                Metrics are stored in your browser (localStorage) and persist between reloads.
+              </p>
             </div>
           ) : activeTab === "tree" ? (
             <BoundaryTreeTable

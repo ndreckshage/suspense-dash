@@ -49,6 +49,9 @@ export interface QueryMetric {
 
 const MAX_PAGE_LOADS = 200;
 
+/** Number of boundaries the PDP page records per request */
+export const EXPECTED_BOUNDARY_COUNT = 13;
+
 class MetricsStore {
   private boundaryMetrics: BoundaryMetric[] = [];
   private fetchMetrics: FetchMetric[] = [];
@@ -98,6 +101,35 @@ class MetricsStore {
     this.requestIds = new Set();
   }
 
+  /** Get metrics for a single request ID */
+  getMetricsForRequest(requestId: string) {
+    return {
+      boundaries: this.boundaryMetrics.filter((m) => m.requestId === requestId),
+      fetches: this.fetchMetrics.filter((m) => m.requestId === requestId),
+      subgraphOps: this.subgraphOpMetrics.filter(
+        (m) => m.requestId === requestId,
+      ),
+      queries: this.queryMetrics.filter((m) => m.requestId === requestId),
+    };
+  }
+
+  /** Wait until a given number of boundaries have been recorded for a request */
+  async awaitBoundaryCount(
+    requestId: string,
+    expectedCount: number,
+    timeoutMs: number = 10000,
+  ): Promise<boolean> {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const count = this.boundaryMetrics.filter(
+        (m) => m.requestId === requestId,
+      ).length;
+      if (count >= expectedCount) return true;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    return false;
+  }
+
   private trimIfNeeded() {
     if (this.requestIds.size <= MAX_PAGE_LOADS) return;
 
@@ -139,11 +171,11 @@ class MetricsStore {
 // module evaluations in the same Node.js process (important in dev mode where
 // Next.js/Turbopack may re-evaluate modules).
 // Version key ensures stale instances (missing new methods) are replaced on hot reload.
-const globalKey = "__suspense_metrics_store_v7__" as const;
+const globalKey = "__suspense_metrics_store_v8__" as const;
 
 declare global {
   // eslint-disable-next-line no-var
-  var __suspense_metrics_store_v7__: MetricsStore | undefined;
+  var __suspense_metrics_store_v8__: MetricsStore | undefined;
 }
 
 export const metricsStore: MetricsStore =
