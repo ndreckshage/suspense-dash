@@ -1,5 +1,4 @@
 import { Suspense } from "react";
-import { headers } from "next/headers";
 import { metricsStore, EXPECTED_BOUNDARY_COUNT } from "@/lib/metrics-store";
 
 interface MetricsEmbedProps {
@@ -9,13 +8,12 @@ interface MetricsEmbedProps {
 /**
  * Server component that embeds per-request metrics in the HTML response.
  *
- * Only activates when the `x-load-test` header is present. Waits for all
- * Suspense boundaries to finish recording metrics, then outputs them as
- * a JSON script tag that the client can extract.
+ * Waits for all Suspense boundaries to finish recording metrics, then outputs
+ * them as a JSON script tag. A companion client component (MetricsCollector)
+ * reads the tag on hydration and persists to localStorage.
  *
- * Wrapped in its own Suspense boundary so it doesn't block initial HTML.
- * The client fetches the full page response (including streamed chunks)
- * and parses out the metrics.
+ * Wrapped in its own Suspense boundary so it doesn't block initial HTML —
+ * it streams in after all other boundaries have completed.
  */
 export function MetricsEmbed({ requestId }: MetricsEmbedProps) {
   return (
@@ -26,10 +24,6 @@ export function MetricsEmbed({ requestId }: MetricsEmbedProps) {
 }
 
 async function MetricsEmbedInner({ requestId }: MetricsEmbedProps) {
-  const headersList = await headers();
-  const isLoadTest = headersList.get("x-load-test") === "true";
-  if (!isLoadTest) return null;
-
   // Wait for all boundaries to finish recording
   await metricsStore.awaitBoundaryCount(
     requestId,

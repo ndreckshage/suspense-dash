@@ -1,5 +1,6 @@
 import { TracedBoundary } from "@/components/TracedBoundary";
 import { MetricsEmbed } from "@/components/MetricsEmbed";
+import { MetricsCollector } from "@/components/MetricsCollector";
 import { executeGqlQuery } from "@/lib/gql-query";
 import { getRequestContext } from "@/lib/boundary-context";
 import { metricsStore } from "@/lib/metrics-store";
@@ -400,8 +401,10 @@ export default async function PDPPage({
         }}
       />
 
-      {/* Embed metrics in HTML for client-side load testing (only when x-load-test header present) */}
+      {/* Embed metrics in HTML — streams in after all boundaries complete */}
       <MetricsEmbed requestId={ctx.requestId} />
+      {/* Client component: reads embedded metrics on hydration, stores in localStorage */}
+      <MetricsCollector />
     </>
   );
 }

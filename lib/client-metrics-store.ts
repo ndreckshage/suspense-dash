@@ -3,7 +3,8 @@
  *
  * Replaces the server-side in-memory MetricsStore for Vercel compatibility.
  * On Vercel, lambda functions don't share memory, so server-side storage
- * is unreliable. Instead, we simulate load client-side and persist here.
+ * is unreliable. Instead, metrics are embedded in each page response and
+ * collected client-side here.
  */
 
 import type {
@@ -21,7 +22,12 @@ export interface ClientMetrics {
   totalPageLoads: number;
 }
 
-const STORAGE_KEY = "suspense-dashboard-metrics";
+/**
+ * Schema version — bump this when the metric shape changes to avoid
+ * deserializing stale data from a previous deploy.
+ */
+const SCHEMA_VERSION = 1;
+const STORAGE_KEY = `suspense-dashboard-metrics-v${SCHEMA_VERSION}`;
 const MAX_PAGE_LOADS = 100;
 
 function loadFromStorage(): ClientMetrics {
