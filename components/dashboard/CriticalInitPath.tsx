@@ -424,53 +424,69 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
           <span>{Math.round((maxMs * 3) / 4)}ms</span>
           <span>{maxMs}ms</span>
         </div>
-        <div className="relative h-5 mt-1">
+        <div className="mt-1 space-y-0">
           {lcpDataReady > 0 && (
-            <div
-              className="absolute top-0 flex items-center"
-              style={{ left: `${(lcpDataReady / maxMs) * 100}%` }}
-            >
-              <div className="w-px h-4 bg-blue-400" />
-              <span className="text-[10px] text-blue-400 ml-1 font-mono whitespace-nowrap">
-                LCP data @ {lcpDataReady}ms
-              </span>
-            </div>
+            <Tooltip content={`LCP data ready at ${lcpDataReady}ms — all data for the LCP boundary has been fetched`}>
+              <div className="relative h-4">
+                <div
+                  className="absolute top-0 flex items-center"
+                  style={{ left: `${(lcpDataReady / maxMs) * 100}%` }}
+                >
+                  <div className="w-px h-3 bg-blue-400" />
+                  <span className="text-[10px] text-blue-400 ml-1 font-mono whitespace-nowrap truncate max-w-[200px]">
+                    LCP data @ {lcpDataReady}ms
+                  </span>
+                </div>
+              </div>
+            </Tooltip>
           )}
           {lcpRendered > 0 && (
-            <div
-              className="absolute top-0 flex items-center"
-              style={{ left: `${(lcpRendered / maxMs) * 100}%` }}
-            >
-              <div className="w-px h-4 bg-green-400" />
-              <span className="text-[10px] text-green-400 ml-1 font-mono whitespace-nowrap">
-                LCP render @ {lcpRendered}ms
-                {lcpBlocked > 0 && (
-                  <span className="text-amber-400"> (+{lcpBlocked}ms blocked)</span>
-                )}
-              </span>
-            </div>
+            <Tooltip content={`LCP rendered at ${lcpRendered}ms — LCP boundary HTML serialized and flushed${lcpBlocked > 0 ? ` (blocked ${lcpBlocked}ms waiting for thread)` : ""}`}>
+              <div className="relative h-4">
+                <div
+                  className="absolute top-0 flex items-center"
+                  style={{ left: `${(lcpRendered / maxMs) * 100}%` }}
+                >
+                  <div className="w-px h-3 bg-green-400" />
+                  <span className="text-[10px] text-green-400 ml-1 font-mono whitespace-nowrap truncate max-w-[200px]">
+                    LCP render @ {lcpRendered}ms
+                    {lcpBlocked > 0 && (
+                      <span className="text-amber-400"> (+{lcpBlocked}ms)</span>
+                    )}
+                  </span>
+                </div>
+              </div>
+            </Tooltip>
           )}
           {hydrationMs > 0 && (
-            <div
-              className="absolute top-0 flex items-center"
-              style={{ left: `${(hydrationMs / maxMs) * 100}%` }}
-            >
-              <div className="w-px h-4 bg-amber-400" />
-              <span className="text-[10px] text-amber-400 ml-1 font-mono whitespace-nowrap">
-                Hydration @ {Math.round(hydrationMs)}ms
-              </span>
-            </div>
+            <Tooltip content={`Hydration at ${Math.round(hydrationMs)}ms — React hydrates the server-rendered HTML and attaches event handlers`}>
+              <div className="relative h-4">
+                <div
+                  className="absolute top-0 flex items-center"
+                  style={{ left: `${(hydrationMs / maxMs) * 100}%` }}
+                >
+                  <div className="w-px h-3 bg-amber-400" />
+                  <span className="text-[10px] text-amber-400 ml-1 font-mono whitespace-nowrap truncate max-w-[200px]">
+                    Hydration @ {Math.round(hydrationMs)}ms
+                  </span>
+                </div>
+              </div>
+            </Tooltip>
           )}
           {csrInitComplete > 0 && (
-            <div
-              className="absolute top-0 flex items-center"
-              style={{ left: `${(csrInitComplete / maxMs) * 100}%` }}
-            >
-              <div className="w-px h-4 bg-purple-400" />
-              <span className="text-[10px] text-purple-400 ml-1 font-mono whitespace-nowrap">
-                Init complete @ {Math.round(csrInitComplete)}ms
-              </span>
-            </div>
+            <Tooltip content={`Init complete at ${Math.round(csrInitComplete)}ms — all client-side queries resolved, page fully interactive`}>
+              <div className="relative h-4">
+                <div
+                  className="absolute top-0 flex items-center"
+                  style={{ left: `${(csrInitComplete / maxMs) * 100}%` }}
+                >
+                  <div className="w-px h-3 bg-purple-400" />
+                  <span className="text-[10px] text-purple-400 ml-1 font-mono whitespace-nowrap truncate max-w-[200px]">
+                    Init complete @ {Math.round(csrInitComplete)}ms
+                  </span>
+                </div>
+              </div>
+            </Tooltip>
           )}
         </div>
       </div>
