@@ -1,5 +1,6 @@
 import { TracedBoundary } from "@/components/TracedBoundary";
 import { MetricsEmbed } from "@/components/MetricsEmbed";
+import { ClientQueryOrchestrator } from "@/components/ClientQueryOrchestrator";
 import { executeGqlQuery } from "@/lib/gql-query";
 import { getRequestContext } from "@/lib/boundary-context";
 import { metricsStore } from "@/lib/metrics-store";
@@ -18,6 +19,9 @@ import {
   mockFooterData,
 } from "@/lib/mock-data";
 import { NavBar } from "@/components/pdp/NavBar";
+import { CartIndicator } from "@/components/pdp/CartIndicator";
+import { FavoriteButton } from "@/components/pdp/FavoriteButton";
+import { ReviewsQA } from "@/components/pdp/ReviewsQA";
 import { Footer } from "@/components/pdp/Footer";
 import { HeroImage, ProductSummary } from "@/components/pdp/HeroImage";
 import { Thumbnails } from "@/components/pdp/Thumbnails";
@@ -116,7 +120,10 @@ export default async function PDPPage({
   });
 
   return (
-    <>
+    <ClientQueryOrchestrator
+      requestId={ctx.requestId}
+      requestStartTs={ctx.requestStartTs}
+    >
       {/* Nav */}
       <TracedBoundary
         name="Nav"
@@ -132,7 +139,7 @@ export default async function PDPPage({
             mockNavData,
           );
           ref.ts = Date.now();
-          return <NavBar data={data} />;
+          return <NavBar data={data} cartSlot={<CartIndicator />} />;
         }}
       />
 
@@ -183,7 +190,7 @@ export default async function PDPPage({
           <div className="flex flex-col md:flex-row md:items-start">
             {/* Left: hero image (outside Suspense for JS-disabled) + thumbnails */}
             <div className="md:w-1/2 flex-shrink-0">
-              <HeroImage imageUrl={heroData.heroImage} />
+              <HeroImage imageUrl={heroData.heroImage} favoriteSlot={<FavoriteButton />} />
 
               {/* Thumbnails — own query, own boundary */}
               <TracedBoundary
@@ -395,6 +402,9 @@ export default async function PDPPage({
               return <Reviews data={data} />;
             }}
           />
+
+          {/* Q&A — loaded client-side via getReviewsQA CSR query */}
+          <ReviewsQA />
         </div>
       </main>
 
@@ -420,6 +430,6 @@ export default async function PDPPage({
       {/* Embed metrics in HTML — streams in after all boundaries complete.
           Includes MetricsCollector client component that persists to localStorage. */}
       <MetricsEmbed requestId={ctx.requestId} />
-    </>
+    </ClientQueryOrchestrator>
   );
 }

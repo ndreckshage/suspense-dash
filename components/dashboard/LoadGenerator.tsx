@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { clientMetricsStore } from "@/lib/client-metrics-store";
+import { simulateCsrQueries } from "@/lib/csr-simulation";
 
 const MAX_TOTAL_PAGE_LOADS = 100;
 
@@ -72,6 +73,27 @@ export function LoadGenerator({ onComplete }: LoadGeneratorProps) {
 
           if (metrics && metrics.boundaries?.length > 0) {
             clientMetricsStore.addPageLoad(metrics);
+
+            // Simulate CSR queries for this page load
+            const requestId = metrics.boundaries[0]?.requestId;
+            const requestStartTs = metrics.boundaries[0]?.timestamp - metrics.boundaries[0]?.wall_start_ms;
+            if (requestId) {
+              // Estimate hydration offset: last SSR boundary end + small overhead
+              const maxSsrEnd = Math.max(
+                ...metrics.boundaries.map(
+                  (b: { wall_start_ms: number; render_duration_ms: number }) =>
+                    b.wall_start_ms + b.render_duration_ms,
+                ),
+              );
+              const hydrationMs = maxSsrEnd + 50; // ~50ms hydration overhead
+              const csrResult = await simulateCsrQueries(
+                requestId,
+                requestStartTs,
+                hydrationMs,
+              );
+              clientMetricsStore.appendCsrMetrics(requestId, csrResult);
+            }
+
             completed++;
           } else {
             errors++;

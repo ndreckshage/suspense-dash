@@ -8,6 +8,7 @@ interface Props {
   boundaries: BoundaryMetric[];
   queries: QueryMetric[];
   pctl: number;
+  hydrationTimes?: Record<string, number>;
 }
 
 interface BoundaryTiming {
@@ -38,6 +39,10 @@ const BOUNDARY_COLORS: Record<string, string> = {
   Carousels: "rgb(236, 72, 153)",
   Reviews: "rgb(34, 197, 94)",
   Footer: "rgb(100, 116, 139)",
+  // CSR boundaries
+  Cart: "rgb(168, 85, 247)",
+  Favorites: "rgb(168, 85, 247)",
+  ReviewsQA: "rgb(34, 197, 94)",
 };
 
 function median(values: number[]): number {
@@ -47,10 +52,36 @@ function median(values: number[]): number {
   return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
-export function LcpCriticalPath({ boundaries, queries, pctl }: Props) {
+export function LcpCriticalPath({ boundaries, queries, pctl, hydrationTimes }: Props) {
+  // Separate SSR and CSR metrics
+  const ssrBoundaries = useMemo(
+    () => boundaries.filter((b) => b.phase !== "csr"),
+    [boundaries],
+  );
+  const csrBoundaries = useMemo(
+    () => boundaries.filter((b) => b.phase === "csr"),
+    [boundaries],
+  );
+  const ssrQueries = useMemo(
+    () => queries.filter((q) => q.phase !== "csr"),
+    [queries],
+  );
+  const csrQueries = useMemo(
+    () => queries.filter((q) => q.phase === "csr"),
+    [queries],
+  );
+
+  // Compute median hydration time across page loads
+  const hydrationMs = useMemo(() => {
+    if (!hydrationTimes) return 0;
+    const values = Object.values(hydrationTimes);
+    if (values.length === 0) return 0;
+    return median(values);
+  }, [hydrationTimes]);
+
   const { timings, maxMs, lcpDataReady, lcpRendered, lcpBlocked, shellEnd } =
     useMemo(() => {
-      if (boundaries.length === 0) {
+      if (ssrBoundaries.length === 0) {
         return {
           timings: [],
           maxMs: 1,
@@ -62,7 +93,7 @@ export function LcpCriticalPath({ boundaries, queries, pctl }: Props) {
       }
 
       const byPath = new Map<string, BoundaryMetric[]>();
-      for (const b of boundaries) {
+      for (const b of ssrBoundaries) {
         const list = byPath.get(b.boundary_path) ?? [];
         list.push(b);
         byPath.set(b.boundary_path, list);
@@ -71,7 +102,7 @@ export function LcpCriticalPath({ boundaries, queries, pctl }: Props) {
       // Group queries by boundary_path — pick first queryName per boundary
       const queryNameByPath = new Map<string, string>();
       const queryByKey = new Map<string, QueryMetric[]>();
-      for (const q of queries) {
+      for (const q of ssrQueries) {
         if (!queryNameByPath.has(q.boundary_path)) {
           queryNameByPath.set(q.boundary_path, q.queryName);
         }
@@ -167,7 +198,16 @@ export function LcpCriticalPath({ boundaries, queries, pctl }: Props) {
       const lcpBlocked = lcpBoundary?.blocked ?? 0;
 
       const allEnds = timings.map((t) => t.wallStart + t.total);
-      const totalMs = Math.max(...allEnds, lcpRendered, 1);
+      // Include CSR query ends if present, capped at hydration + 3s
+      const csrEnds = csrBoundaries.map(
+        (b) => b.wall_start_ms + (b.fetch_duration_ms ?? b.render_duration_ms),
+      );
+      const csrMaxRaw = csrEnds.length > 0 ? Math.max(...csrEnds) : 0;
+      const csrMax =
+        hydrationMs > 0
+          ? Math.min(csrMaxRaw, hydrationMs + 3000)
+          : csrMaxRaw;
+      const totalMs = Math.max(...allEnds, lcpRendered, csrMax, 1);
       const maxMs = Math.ceil(totalMs * 1.15);
 
       return {
@@ -178,7 +218,58 @@ export function LcpCriticalPath({ boundaries, queries, pctl }: Props) {
         lcpBlocked,
         shellEnd,
       };
-    }, [boundaries, queries, pctl]);
+    }, [ssrBoundaries, ssrQueries, csrBoundaries, hydrationMs, pctl]);
+
+  // Compute CSR query timings for visualization
+  const csrTimings = useMemo(() => {
+    if (csrBoundaries.length === 0) return [];
+
+    const byPath = new Map<string, BoundaryMetric[]>();
+    for (const b of csrBoundaries) {
+      const list = byPath.get(b.boundary_path) ?? [];
+      list.push(b);
+      byPath.set(b.boundary_path, list);
+    }
+
+    const queryNameByPath = new Map<string, string>();
+    for (const q of csrQueries) {
+      if (!queryNameByPath.has(q.boundary_path)) {
+        queryNameByPath.set(q.boundary_path, q.queryName);
+      }
+    }
+
+    return [...byPath.keys()]
+      .sort((a, b) => {
+        const aMedian = median(byPath.get(a)!.map((m) => m.wall_start_ms));
+        const bMedian = median(byPath.get(b)!.map((m) => m.wall_start_ms));
+        return aMedian - bMedian;
+      })
+      .map((path) => {
+        const metrics = byPath.get(path)!;
+        const name = path.split(".").pop()!;
+        return {
+          name,
+          boundaryPath: path,
+          wallStart: percentile(
+            metrics.map((m) => m.wall_start_ms),
+            pctl,
+          ),
+          fetchDuration: percentile(
+            metrics.map((m) => m.fetch_duration_ms ?? m.render_duration_ms),
+            pctl,
+          ),
+          queryName: queryNameByPath.get(path) ?? "",
+        };
+      });
+  }, [csrBoundaries, csrQueries, pctl]);
+
+  // CSR init complete time (latest CSR query end)
+  const csrInitComplete = useMemo(() => {
+    if (csrTimings.length === 0) return 0;
+    return Math.max(
+      ...csrTimings.map((t) => t.wallStart + t.fetchDuration),
+    );
+  }, [csrTimings]);
 
   if (timings.length === 0) {
     return (
@@ -298,6 +389,14 @@ export function LcpCriticalPath({ boundaries, queries, pctl }: Props) {
               style={{ left: `calc(${(lcpDataReady / maxMs) * 100}% + 12px)` }}
             />
           )}
+
+          {/* Hydration marker */}
+          {hydrationMs > 0 && (
+            <div
+              className="absolute top-0 bottom-0 w-px border-l border-dashed border-amber-400/60"
+              style={{ left: `calc(${(hydrationMs / maxMs) * 100}% + 12px)` }}
+            />
+          )}
         </div>
       </div>
 
@@ -378,8 +477,115 @@ export function LcpCriticalPath({ boundaries, queries, pctl }: Props) {
               </div>
             )}
           </div>
+
+          {/* Hydration marker */}
+          {hydrationMs > 0 && (
+            <div
+              className="absolute top-3 bottom-3 w-px border-l border-dashed border-amber-400/60"
+              style={{ left: `calc(${(hydrationMs / maxMs) * 100}% + 12px)` }}
+            />
+          )}
         </div>
       </div>
+
+      {/* CSR Queries timeline */}
+      {csrTimings.length > 0 && (
+        <div>
+          <div className="text-xs text-zinc-400 mb-2 font-medium">
+            Client Queries{" "}
+            <span className="text-zinc-600">(post-hydration)</span>
+          </div>
+          <div className="relative bg-zinc-900 rounded border border-zinc-800 p-3">
+            {/* Grid lines */}
+            <div className="absolute inset-3 flex justify-between pointer-events-none">
+              {[0, 25, 50, 75, 100].map((pct) => (
+                <div
+                  key={pct}
+                  className="w-px bg-zinc-800"
+                  style={{ height: "100%" }}
+                />
+              ))}
+            </div>
+
+            <div className="space-y-1.5 relative">
+              {csrTimings.map((t) => {
+                const leftPct = (t.wallStart / maxMs) * 100;
+                const widthPct = Math.max(
+                  (t.fetchDuration / maxMs) * 100,
+                  1.5,
+                );
+                const color =
+                  BOUNDARY_COLORS[t.name] ?? "rgb(168, 85, 247)";
+
+                return (
+                  <div key={t.boundaryPath} className="relative h-7">
+                    <div
+                      className="absolute top-0 h-full rounded flex items-center overflow-hidden"
+                      style={{
+                        left: `${leftPct}%`,
+                        width: `${widthPct}%`,
+                        background: `repeating-linear-gradient(
+                          135deg,
+                          ${color},
+                          ${color} 3px,
+                          transparent 3px,
+                          transparent 6px
+                        )`,
+                        backgroundColor: color,
+                        opacity: 0.85,
+                      }}
+                    >
+                      <span className="text-xs text-white px-1.5 truncate font-mono drop-shadow-sm">
+                        {t.name} ({t.fetchDuration}ms)
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Hydration marker */}
+            {hydrationMs > 0 && (
+              <div
+                className="absolute top-3 bottom-3 w-px border-l border-dashed border-amber-400/60"
+                style={{
+                  left: `calc(${(hydrationMs / maxMs) * 100}% + 12px)`,
+                }}
+              />
+            )}
+
+            {/* Markers */}
+            <div className="relative h-6 mt-1">
+              {hydrationMs > 0 && (
+                <div
+                  className="absolute top-0 flex items-center"
+                  style={{ left: `${(hydrationMs / maxMs) * 100}%` }}
+                >
+                  <div className="w-px h-4 bg-amber-400" />
+                  <span className="text-xs text-amber-400 ml-1 font-mono whitespace-nowrap">
+                    Hydration @ {Math.round(hydrationMs)}ms
+                  </span>
+                </div>
+              )}
+            </div>
+            <div className="relative h-6">
+              {csrInitComplete > 0 && (
+                <div
+                  className="absolute top-0 flex items-center"
+                  style={{
+                    left: `${(csrInitComplete / maxMs) * 100}%`,
+                  }}
+                >
+                  <div className="w-px h-4 bg-purple-400" />
+                  <span className="text-xs text-purple-400 ml-1 font-mono whitespace-nowrap">
+                    Init complete @ {Math.round(csrInitComplete)}ms
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Summary */}
       <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs font-mono">
@@ -414,6 +620,28 @@ export function LcpCriticalPath({ boundaries, queries, pctl }: Props) {
           <span className="text-zinc-500">Total to LCP render: </span>
           <span className="text-blue-400 font-medium">{lcpRendered}ms</span>
         </div>
+        {hydrationMs > 0 && (
+          <div>
+            <span className="text-zinc-500">Hydration: </span>
+            <span className="text-amber-400">{Math.round(hydrationMs)}ms</span>
+          </div>
+        )}
+        {csrInitComplete > 0 && (
+          <div>
+            <span className="text-zinc-500">CSR init complete: </span>
+            <span className="text-purple-400 font-medium">
+              {Math.round(csrInitComplete)}ms
+            </span>
+          </div>
+        )}
+        {csrInitComplete > 0 && (
+          <div>
+            <span className="text-zinc-500">Total E2E: </span>
+            <span className="text-white font-medium">
+              {Math.round(csrInitComplete)}ms
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,9 +1,11 @@
+import type { ReactNode } from "react";
+
 interface NavData {
   categories: { name: string; href: string }[];
   logo: string;
 }
 
-export function NavBar({ data }: { data: NavData }) {
+export function NavBar({ data, cartSlot }: { data: NavData; cartSlot?: ReactNode }) {
   return (
     <nav className="bg-zinc-900 border-b border-zinc-800 px-4 md:px-6 py-3 md:py-4 overflow-hidden">
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
@@ -19,9 +21,9 @@ export function NavBar({ data }: { data: NavData }) {
             </a>
           ))}
         </div>
-        <div className="flex gap-4 text-zinc-400 flex-shrink-0">
+        <div className="flex items-center gap-4 text-zinc-400 flex-shrink-0">
           <span className="text-sm">Search</span>
-          <span className="text-sm">Cart (0)</span>
+          {cartSlot ?? <span className="text-sm">Cart (0)</span>}
         </div>
       </div>
     </nav>

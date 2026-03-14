@@ -136,6 +136,7 @@ export default function DashboardPage() {
               boundaries={metrics?.boundaries ?? []}
               queries={metrics?.queries ?? []}
               pctl={pctl}
+              hydrationTimes={metrics?.hydrationTimes}
             />
           )}
         </div>

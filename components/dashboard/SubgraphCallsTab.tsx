@@ -28,6 +28,7 @@ interface OperationDetail {
   durationPctl: number;
   boundaries: string[];
   queryNames: string[];
+  isClient: boolean;
 }
 
 export function SubgraphCallsTab({ queries, subgraphOps, pctl }: Props) {
@@ -44,22 +45,25 @@ export function SubgraphCallsTab({ queries, subgraphOps, pctl }: Props) {
 
   const { summary, subgraphRows } = useMemo(() => {
     if (subgraphOps.length === 0) {
-      return { summary: { callsPerReq: 0, dedupedPerReq: 0 }, subgraphRows: [] };
+      return { summary: { ssrCallsPerReq: 0, csrCallsPerReq: 0, dedupedPerReq: 0 }, subgraphRows: [] };
     }
 
     const requestIds = new Set(subgraphOps.map((o) => o.requestId));
     const numRequests = requestIds.size;
 
-    // Count uncached (actual network calls) and cached (deduped) ops
-    let totalUncached = 0;
+    // Count uncached (actual network calls) and cached (deduped) ops, split by phase
+    let ssrUncached = 0;
+    let csrUncached = 0;
     let totalCached = 0;
     for (const op of subgraphOps) {
       if (op.cached) totalCached++;
-      else totalUncached++;
+      else if (op.phase === "csr") csrUncached++;
+      else ssrUncached++;
     }
 
     const summary = {
-      callsPerReq: Math.round((totalUncached / numRequests) * 10) / 10,
+      ssrCallsPerReq: Math.round((ssrUncached / numRequests) * 10) / 10,
+      csrCallsPerReq: Math.round((csrUncached / numRequests) * 10) / 10,
       dedupedPerReq: Math.round((totalCached / numRequests) * 10) / 10,
     };
 
@@ -106,6 +110,7 @@ export function SubgraphCallsTab({ queries, subgraphOps, pctl }: Props) {
           durationPctl: percentile(uncachedDurations, pctl),
           boundaries: [...boundarySet],
           queryNames: [...querySet],
+          isClient: ops.some((o) => o.phase === "csr"),
         });
       }
 
@@ -141,11 +146,17 @@ export function SubgraphCallsTab({ queries, subgraphOps, pctl }: Props) {
   return (
     <div className="space-y-4">
       {/* Summary */}
-      <div className="flex gap-6 text-sm">
+      <div className="flex flex-wrap gap-6 text-sm">
         <div>
-          <span className="text-zinc-500">Subgraph calls / request: </span>
-          <span className="text-white font-medium">{summary.callsPerReq}</span>
+          <span className="text-zinc-500">SSR calls / request: </span>
+          <span className="text-white font-medium">{summary.ssrCallsPerReq}</span>
         </div>
+        {summary.csrCallsPerReq > 0 && (
+          <div>
+            <span className="text-zinc-500">CSR calls / request: </span>
+            <span className="text-purple-400 font-medium">{summary.csrCallsPerReq}</span>
+          </div>
+        )}
         {summary.dedupedPerReq > 0 && (
           <div>
             <span className="text-zinc-500">Saved by dedup: </span>
@@ -249,6 +260,11 @@ function SubgraphRow({
               <div className="flex items-center gap-1.5 pl-9">
                 <span className="text-zinc-600">&#x2514;</span>
                 <span className="text-zinc-400">{op.name}</span>
+                {op.isClient && (
+                  <span className="text-xs bg-purple-900/30 text-purple-400 rounded px-1 py-0.5">
+                    client
+                  </span>
+                )}
               </div>
             </td>
             <td className="text-right py-1 px-2 text-zinc-400">{op.callsPerReq}</td>

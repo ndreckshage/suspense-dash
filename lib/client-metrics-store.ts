@@ -20,6 +20,8 @@ export interface ClientMetrics {
   queries: QueryMetric[];
   subgraphOps: SubgraphOperationMetric[];
   totalPageLoads: number;
+  /** Per-request hydration offsets (ms from request start to hydration) */
+  hydrationTimes?: Record<string, number>;
 }
 
 /**
@@ -133,6 +135,35 @@ export const clientMetricsStore = {
     const trimmed = trimMetrics(merged);
     trimmed.totalPageLoads = countPageLoads(trimmed.boundaries);
     saveToStorage(trimmed);
+  },
+
+  /** Append CSR metrics to an existing page load by requestId */
+  appendCsrMetrics(
+    requestId: string,
+    csrData: {
+      boundaries: BoundaryMetric[];
+      queries: QueryMetric[];
+      subgraphOps: SubgraphOperationMetric[];
+      hydration_ms: number;
+    },
+  ) {
+    const current = loadFromStorage();
+    // Only append if this request exists in stored data
+    if (!current.boundaries.some((b) => b.requestId === requestId)) return;
+    // Don't double-append CSR data
+    if (current.queries.some((q) => q.requestId === requestId && q.phase === "csr")) return;
+
+    const merged: ClientMetrics = {
+      ...current,
+      boundaries: [...current.boundaries, ...csrData.boundaries],
+      queries: [...current.queries, ...csrData.queries],
+      subgraphOps: [...current.subgraphOps, ...csrData.subgraphOps],
+      hydrationTimes: {
+        ...current.hydrationTimes,
+        [requestId]: csrData.hydration_ms,
+      },
+    };
+    saveToStorage(merged);
   },
 
   clear() {
