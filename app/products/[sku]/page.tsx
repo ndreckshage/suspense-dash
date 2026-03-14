@@ -120,7 +120,7 @@ export default async function PDPPage({
         boundaryPath="shell.nav"
         renderCostMs={80}
         fallback={
-          <div className="bg-zinc-900 border-b border-zinc-800 px-6 py-4 h-14 animate-pulse" />
+          <div className="bg-zinc-900 border-b border-zinc-800 px-6 py-4 h-16 animate-pulse" />
         }
         render={async (ref) => {
           const data = await executeGqlQuery(
@@ -215,7 +215,6 @@ export default async function PDPPage({
               <TracedBoundary
                 name="pdp"
                 boundaryPath="shell.content.main.pdp"
-                lcpCritical={true}
                 renderCostMs={5}
                 fallback={
                   <div className="px-6 md:px-0 pb-4 space-y-3">
@@ -227,11 +226,9 @@ export default async function PDPPage({
                     {/* Rating */}
                     <div className="h-4 bg-zinc-800 rounded w-48 animate-pulse" />
                     {/* Price */}
-                    <div className="h-10 bg-zinc-800 rounded w-40 animate-pulse mt-4" />
+                    <div className="h-10 bg-zinc-800 rounded w-40 animate-pulse mt-2" />
                     {/* Original price + discount */}
                     <div className="h-4 bg-zinc-800 rounded w-32 animate-pulse" />
-                    {/* Inventory */}
-                    <div className="h-4 bg-zinc-800 rounded w-36 animate-pulse mt-2" />
                   </div>
                 }
                 render={async (ref) => {
@@ -270,9 +267,12 @@ export default async function PDPPage({
                 boundaryPath="shell.content.main.bullets"
                 renderCostMs={3}
                 fallback={
-                  <div className="px-6 md:px-0 py-4 border-t border-zinc-800 space-y-2">
-                    {Array.from({ length: 5 }).map((_, i) => (
-                      <div key={i} className="h-4 bg-zinc-800 rounded w-full animate-pulse" />
+                  <div className="px-6 md:px-0 border-t border-zinc-800 space-y-2">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <div
+                        key={i}
+                        className="h-4 bg-zinc-800 rounded w-full animate-pulse mt-4 mb-4"
+                      />
                     ))}
                   </div>
                 }

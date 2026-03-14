@@ -183,10 +183,10 @@ export function LcpCriticalPath({ boundaries, queries, pctl }: Props) {
         ? shell.wallStart + shell.fetchDuration + shell.renderCost
         : 0;
 
-      // LCP boundary
-      const pdp = timings.find((t) => t.lcpCritical && t.name === "pdp");
+      // LCP boundary — hero image is the true LCP element (largest visible content)
       const hero = timings.find((t) => t.lcpCritical && t.name === "hero");
-      const lcpBoundary = pdp ?? hero;
+      const pdp = timings.find((t) => t.lcpCritical && t.name === "pdp");
+      const lcpBoundary = hero ?? pdp;
       const lcpDataReady = lcpBoundary
         ? lcpBoundary.wallStart + lcpBoundary.fetchDuration
         : 0;

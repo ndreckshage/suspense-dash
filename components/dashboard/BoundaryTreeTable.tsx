@@ -72,7 +72,7 @@ const TREE_STRUCTURE: TreeItem[] = [
   { path: "shell.content.main.thumbnails.query.op1", name: "media.thumbnails", type: "subgraph-op", boundaryPath: "shell.content.main.thumbnails", queryName: "getThumbnails", opName: "media.thumbnails", subgraphName: "media-subgraph" },
 
   // pdp (LCP critical — getProductInfo + getProductPricing in parallel)
-  { path: "shell.content.main.pdp", name: "pdp", type: "boundary", boundaryPath: "shell.content.main.pdp", lcpCritical: true, expectedFetchMs: 55 },
+  { path: "shell.content.main.pdp", name: "pdp", type: "boundary", boundaryPath: "shell.content.main.pdp", expectedFetchMs: 55 },
   { path: "shell.content.main.pdp.query1", name: "getProductInfo", type: "query", boundaryPath: "shell.content.main.pdp", queryName: "getProductInfo" },
   { path: "shell.content.main.pdp.query1.op1", name: "product.core", type: "subgraph-op", boundaryPath: "shell.content.main.pdp", queryName: "getProductInfo", opName: "product.core", subgraphName: "product-subgraph" },
   { path: "shell.content.main.pdp.query1.op2", name: "product.bullets", type: "subgraph-op", boundaryPath: "shell.content.main.pdp", queryName: "getProductInfo", opName: "product.bullets", subgraphName: "product-subgraph" },
