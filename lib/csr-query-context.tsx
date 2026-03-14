@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useCallback, useMemo } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react";
 import type { ReactNode } from "react";
 
 type CsrQueryStatus = "pending" | "complete";
@@ -14,6 +14,11 @@ const CsrQueryContext = createContext<CsrQueryContextValue | null>(null);
 
 export function CsrQueryProvider({ children }: { children: ReactNode }) {
   const [completed, setCompleted] = useState<Set<string>>(() => new Set());
+  // Hydration guard: CsrQueryRunner's effect can fire and call markComplete
+  // before nested Suspense boundaries (e.g. CartIndicator in Nav) hydrate.
+  // Force "pending" until after mount so the client matches server HTML.
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
 
   const markComplete = useCallback((queryName: string) => {
     setCompleted((prev) => {
@@ -25,8 +30,8 @@ export function CsrQueryProvider({ children }: { children: ReactNode }) {
 
   const getStatus = useCallback(
     (queryName: string): CsrQueryStatus =>
-      completed.has(queryName) ? "complete" : "pending",
-    [completed],
+      hydrated && completed.has(queryName) ? "complete" : "pending",
+    [completed, hydrated],
   );
 
   const value = useMemo(
