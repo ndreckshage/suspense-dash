@@ -1,9 +1,70 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useRef, useCallback, type ReactNode } from "react";
 import type { BoundaryMetric, QueryMetric } from "@/lib/metrics-store";
 import type { LoAFEntry, NavigationTiming } from "@/lib/client-metrics-store";
 import { percentile } from "@/lib/percentile";
+
+function Tooltip({ content, children, className, style }: { content: ReactNode; children: ReactNode; className?: string; style?: React.CSSProperties }) {
+  const [show, setShow] = useState(false);
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+
+  const onEnter = useCallback((e: React.MouseEvent) => {
+    setPos({ x: e.clientX, y: e.clientY });
+    setShow(true);
+  }, []);
+
+  const onMove = useCallback((e: React.MouseEvent) => {
+    setPos({ x: e.clientX, y: e.clientY });
+  }, []);
+
+  const onLeave = useCallback(() => setShow(false), []);
+
+  return (
+    <div
+      onMouseEnter={onEnter}
+      onMouseMove={onMove}
+      onMouseLeave={onLeave}
+      className={className ?? "relative"}
+      style={style}
+    >
+      {children}
+      {show && (
+        <div
+          className="fixed z-50 pointer-events-none"
+          style={{ left: pos.x + 12, top: pos.y - 8 }}
+        >
+          <div className="bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 shadow-xl text-xs font-mono text-zinc-200 max-w-sm">
+            {content}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface TooltipLine {
+  label: string;
+  value: string | number;
+  color?: string;
+}
+
+function TooltipContent({ title, lines, tag }: { title: string; lines: TooltipLine[]; tag?: string }) {
+  return (
+    <>
+      <div className="flex items-center gap-2 mb-1">
+        <span className="text-zinc-100 font-medium">{title}</span>
+        {tag && <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-700 text-zinc-400">{tag}</span>}
+      </div>
+      {lines.map((line, i) => (
+        <div key={i} className="flex justify-between gap-4">
+          <span className="text-zinc-500">{line.label}</span>
+          <span className={line.color ?? "text-zinc-200"}>{line.value}</span>
+        </div>
+      ))}
+    </>
+  );
+}
 
 interface Props {
   boundaries: BoundaryMetric[];
@@ -354,23 +415,80 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
 
   return (
     <div className="space-y-6 overflow-x-auto" style={{ minWidth: 0 }}>
-      <div className="text-xs text-zinc-500 mb-2">
-        Shows how GQL queries overlap on the server, but sync rendering
-        serializes on the single Node.js thread.
-        {lcpBlocked > 0 && (
-          <span className="text-amber-400 ml-2">
-            LCP boundary was blocked {lcpBlocked}ms by other renders.
-          </span>
-        )}
-      </div>
-
-      {/* Time axis */}
-      <div className="flex justify-between text-xs text-zinc-600 font-mono">
-        <span>0ms</span>
-        <span>{Math.round(maxMs / 4)}ms</span>
-        <span>{Math.round(maxMs / 2)}ms</span>
-        <span>{Math.round((maxMs * 3) / 4)}ms</span>
-        <span>{maxMs}ms</span>
+      {/* Time axis + marker labels */}
+      <div>
+        <div className="flex justify-between text-xs text-zinc-600 font-mono">
+          <span>0ms</span>
+          <span>{Math.round(maxMs / 4)}ms</span>
+          <span>{Math.round(maxMs / 2)}ms</span>
+          <span>{Math.round((maxMs * 3) / 4)}ms</span>
+          <span>{maxMs}ms</span>
+        </div>
+        <div className="mt-1 space-y-0">
+          {lcpDataReady > 0 && (
+            <Tooltip content={`LCP data ready at ${lcpDataReady}ms — all data for the LCP boundary has been fetched`}>
+              <div className="relative h-4">
+                <div
+                  className="absolute top-0 flex items-center"
+                  style={{ left: `${(lcpDataReady / maxMs) * 100}%` }}
+                >
+                  <div className="w-px h-3 bg-blue-400" />
+                  <span className="text-[10px] text-blue-400 ml-1 font-mono whitespace-nowrap truncate max-w-[200px]">
+                    LCP data @ {lcpDataReady}ms
+                  </span>
+                </div>
+              </div>
+            </Tooltip>
+          )}
+          {lcpRendered > 0 && (
+            <Tooltip content={`LCP rendered at ${lcpRendered}ms — LCP boundary HTML serialized and flushed${lcpBlocked > 0 ? ` (blocked ${lcpBlocked}ms waiting for thread)` : ""}`}>
+              <div className="relative h-4">
+                <div
+                  className="absolute top-0 flex items-center"
+                  style={{ left: `${(lcpRendered / maxMs) * 100}%` }}
+                >
+                  <div className="w-px h-3 bg-green-400" />
+                  <span className="text-[10px] text-green-400 ml-1 font-mono whitespace-nowrap truncate max-w-[200px]">
+                    LCP render @ {lcpRendered}ms
+                    {lcpBlocked > 0 && (
+                      <span className="text-amber-400"> (+{lcpBlocked}ms)</span>
+                    )}
+                  </span>
+                </div>
+              </div>
+            </Tooltip>
+          )}
+          {hydrationMs > 0 && (
+            <Tooltip content={`Hydration at ${Math.round(hydrationMs)}ms — React hydrates the server-rendered HTML and attaches event handlers`}>
+              <div className="relative h-4">
+                <div
+                  className="absolute top-0 flex items-center"
+                  style={{ left: `${(hydrationMs / maxMs) * 100}%` }}
+                >
+                  <div className="w-px h-3 bg-amber-400" />
+                  <span className="text-[10px] text-amber-400 ml-1 font-mono whitespace-nowrap truncate max-w-[200px]">
+                    Hydration @ {Math.round(hydrationMs)}ms
+                  </span>
+                </div>
+              </div>
+            </Tooltip>
+          )}
+          {csrInitComplete > 0 && (
+            <Tooltip content={`Init complete at ${Math.round(csrInitComplete)}ms — all client-side queries resolved, page fully interactive`}>
+              <div className="relative h-4">
+                <div
+                  className="absolute top-0 flex items-center"
+                  style={{ left: `${(csrInitComplete / maxMs) * 100}%` }}
+                >
+                  <div className="w-px h-3 bg-purple-400" />
+                  <span className="text-[10px] text-purple-400 ml-1 font-mono whitespace-nowrap truncate max-w-[200px]">
+                    Init complete @ {Math.round(csrInitComplete)}ms
+                  </span>
+                </div>
+              </div>
+            </Tooltip>
+          )}
+        </div>
       </div>
 
       {/* Query timeline (with subgraph op sub-bars) */}
@@ -392,7 +510,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
 
           {/* Waterfall marker: shell end */}
 
-          <div className="space-y-1.5 relative">
+          <div className="space-y-1.5 relative z-10">
             {timings
               .filter((t) => t.name !== "Layout")
               .map((t) => {
@@ -403,45 +521,71 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
                 );
                 const color = BOUNDARY_COLORS[t.name] ?? "rgb(100, 116, 139)";
 
+                const tooltipLines: TooltipLine[] = t.cached
+                  ? [{ label: "Query", value: t.queryName }, { label: "Status", value: "Cached (React cache() dedup)", color: "text-cyan-400" }]
+                  : [
+                      { label: "Query", value: t.queryName },
+                      { label: "Wall start", value: `${t.wallStart}ms` },
+                      { label: "Fetch", value: `${t.fetchDuration}ms`, color: "text-zinc-100" },
+                      { label: "Render cost", value: `${t.renderCost}ms` },
+                      ...(t.blocked > 0 ? [{ label: "Blocked", value: `${t.blocked}ms`, color: "text-amber-400" }] : []),
+                      { label: "Total", value: `${t.total}ms`, color: "text-zinc-100" },
+                    ];
+
                 return (
-                  <div key={t.boundaryPath} className="relative h-7">
-                    {/* Query bar (outer) */}
-                    <div
-                      className={`absolute top-0 h-full rounded flex items-center overflow-hidden ${
-                        t.cached
-                          ? "opacity-40 border border-dashed border-zinc-600"
-                          : ""
-                      }`}
-                      style={{
-                        left: `${leftPct}%`,
-                        width: `${widthPct}%`,
-                        backgroundColor: t.cached ? "transparent" : color,
-                        opacity: t.lcpCritical ? 1 : 0.7,
-                      }}
-                    >
-                      <span className="text-xs text-white px-1.5 truncate font-mono">
-                        {t.name}{" "}
-                        {t.cached ? "(cached)" : `(${t.fetchDuration}ms)`}
-                      </span>
+                  <Tooltip
+                    key={t.boundaryPath}
+                    content={<TooltipContent title={t.name} lines={tooltipLines} tag={t.lcpCritical ? "LCP" : undefined} />}
+                  >
+                    <div className="relative h-7">
+                      {/* Query bar (outer) */}
+                      <div
+                        className={`absolute top-0 h-full rounded flex items-center overflow-hidden cursor-default ${
+                          t.cached
+                            ? "opacity-40 border border-dashed border-zinc-600"
+                            : ""
+                        }`}
+                        style={{
+                          left: `${leftPct}%`,
+                          width: `${widthPct}%`,
+                          backgroundColor: t.cached ? "transparent" : color,
+                          opacity: t.lcpCritical ? 1 : 0.7,
+                        }}
+                      >
+                        <span className="text-xs text-white px-1.5 truncate font-mono">
+                          {t.name}{" "}
+                          {t.cached ? "(cached)" : `(${t.fetchDuration}ms)`}
+                        </span>
+                      </div>
                     </div>
-                  </div>
+                  </Tooltip>
                 );
               })}
           </div>
 
-          {/* LCP data ready marker */}
+          {/* Vertical marker lines */}
           {lcpDataReady > 0 && (
             <div
-              className="absolute top-0 bottom-0 w-px bg-blue-400/50"
+              className="absolute top-0 bottom-0 w-px bg-blue-400/50 z-0"
               style={{ left: `calc(${(lcpDataReady / maxMs) * 100}% + 12px)` }}
             />
           )}
-
-          {/* Hydration marker */}
+          {lcpRendered > 0 && (
+            <div
+              className="absolute top-0 bottom-0 w-px bg-green-400/40 z-0"
+              style={{ left: `calc(${(lcpRendered / maxMs) * 100}% + 12px)` }}
+            />
+          )}
           {hydrationMs > 0 && (
             <div
-              className="absolute top-0 bottom-0 w-px border-l border-dashed border-amber-400/60"
+              className="absolute top-0 bottom-0 w-px border-l border-dashed border-amber-400/60 z-0"
               style={{ left: `calc(${(hydrationMs / maxMs) * 100}% + 12px)` }}
+            />
+          )}
+          {csrInitComplete > 0 && (
+            <div
+              className="absolute top-0 bottom-0 w-px bg-purple-400/40 z-0"
+              style={{ left: `calc(${(csrInitComplete / maxMs) * 100}% + 12px)` }}
             />
           )}
         </div>
@@ -465,71 +609,70 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
             ))}
           </div>
 
-          <div className="relative h-8">
+          <div className="relative h-8 z-10">
             {renderBlocks.map((block) => {
               const leftPct = (block.start / maxMs) * 100;
               const widthPct = Math.max((block.duration / maxMs) * 100, 1.5);
               const color = BOUNDARY_COLORS[block.name] ?? "rgb(100, 116, 139)";
 
               return (
-                <div
+                <Tooltip
                   key={block.name}
-                  className={`absolute top-0 h-full rounded flex items-center overflow-hidden ${
-                    block.lcpCritical ? "ring-1 ring-blue-400" : ""
+                  className={`absolute top-0 h-full cursor-default ${
+                    block.lcpCritical ? "ring-1 ring-blue-400 rounded" : ""
                   }`}
                   style={{
                     left: `${leftPct}%`,
                     width: `${widthPct}%`,
-                    backgroundColor: color,
                   }}
+                  content={
+                    <TooltipContent
+                      title={block.name}
+                      lines={[
+                        { label: "Render start", value: `${Math.round(block.start)}ms` },
+                        { label: "Render cost", value: `${block.duration}ms`, color: "text-zinc-100" },
+                        { label: "Type", value: "Sync (blocks thread)" },
+                      ]}
+                      tag={block.lcpCritical ? "LCP" : undefined}
+                    />
+                  }
                 >
-                  <span className="text-xs text-white px-1 truncate font-mono">
-                    {block.name} ({block.duration}ms)
-                  </span>
-                </div>
+                  <div
+                    className="h-full rounded flex items-center overflow-hidden"
+                    style={{ backgroundColor: color }}
+                  >
+                    <span className="text-xs text-white px-1 truncate font-mono">
+                      {block.name} ({block.duration}ms)
+                    </span>
+                  </div>
+                </Tooltip>
               );
             })}
           </div>
 
-          {/* Markers */}
-          <div className="relative h-6">
-            {lcpDataReady > 0 && (
-              <div
-                className="absolute top-0 flex items-center"
-                style={{ left: `${(lcpDataReady / maxMs) * 100}%` }}
-              >
-                <div className="w-px h-4 bg-blue-400" />
-                <span className="text-xs text-blue-400 ml-1 font-mono whitespace-nowrap">
-                  LCP data ready @ {lcpDataReady}ms
-                </span>
-              </div>
-            )}
-          </div>
-          <div className="relative h-6">
-            {lcpRendered > 0 && (
-              <div
-                className="absolute top-0 flex items-center"
-                style={{ left: `${(lcpRendered / maxMs) * 100}%` }}
-              >
-                <div className="w-px h-4 bg-green-400" />
-                <span className="text-xs text-green-400 ml-1 font-mono whitespace-nowrap">
-                  LCP rendered @ {lcpRendered}ms
-                  {lcpBlocked > 0 && (
-                    <span className="text-amber-400">
-                      {" "}
-                      (+{lcpBlocked}ms blocked)
-                    </span>
-                  )}
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* Hydration marker */}
+          {/* Vertical marker lines */}
+          {lcpDataReady > 0 && (
+            <div
+              className="absolute top-3 bottom-3 w-px bg-blue-400/50 z-0"
+              style={{ left: `calc(${(lcpDataReady / maxMs) * 100}% + 12px)` }}
+            />
+          )}
+          {lcpRendered > 0 && (
+            <div
+              className="absolute top-3 bottom-3 w-px bg-green-400/40 z-0"
+              style={{ left: `calc(${(lcpRendered / maxMs) * 100}% + 12px)` }}
+            />
+          )}
           {hydrationMs > 0 && (
             <div
-              className="absolute top-3 bottom-3 w-px border-l border-dashed border-amber-400/60"
+              className="absolute top-3 bottom-3 w-px border-l border-dashed border-amber-400/60 z-0"
               style={{ left: `calc(${(hydrationMs / maxMs) * 100}% + 12px)` }}
+            />
+          )}
+          {csrInitComplete > 0 && (
+            <div
+              className="absolute top-3 bottom-3 w-px bg-purple-400/40 z-0"
+              style={{ left: `calc(${(csrInitComplete / maxMs) * 100}% + 12px)` }}
             />
           )}
         </div>
@@ -554,7 +697,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
               ))}
             </div>
 
-            <div className="space-y-1.5 relative">
+            <div className="space-y-1.5 relative z-10">
               {csrTimings.map((t) => {
                 const leftPct = (t.wallStart / maxMs) * 100;
                 const widthPct = Math.max(
@@ -565,71 +708,75 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
                   BOUNDARY_COLORS[t.name] ?? "rgb(168, 85, 247)";
 
                 return (
-                  <div key={t.boundaryPath} className="relative h-7">
-                    <div
-                      className="absolute top-0 h-full rounded flex items-center overflow-hidden"
-                      style={{
-                        left: `${leftPct}%`,
-                        width: `${widthPct}%`,
-                        background: `repeating-linear-gradient(
-                          135deg,
-                          ${color},
-                          ${color} 3px,
-                          transparent 3px,
-                          transparent 6px
-                        )`,
-                        backgroundColor: color,
-                        opacity: 0.85,
-                      }}
-                    >
-                      <span className="text-xs text-white px-1.5 truncate font-mono drop-shadow-sm">
-                        {t.name} ({t.fetchDuration}ms)
-                      </span>
+                  <Tooltip
+                    key={t.boundaryPath}
+                    content={
+                      <TooltipContent
+                        title={t.name}
+                        lines={[
+                          { label: "Query", value: t.queryName },
+                          { label: "Starts at", value: `${Math.round(t.wallStart)}ms` },
+                          { label: "Fetch", value: `${t.fetchDuration}ms`, color: "text-zinc-100" },
+                        ]}
+                        tag="CSR"
+                      />
+                    }
+                  >
+                    <div className="relative h-7">
+                      <div
+                        className="absolute top-0 h-full rounded flex items-center overflow-hidden cursor-default"
+                        style={{
+                          left: `${leftPct}%`,
+                          width: `${widthPct}%`,
+                          background: `repeating-linear-gradient(
+                            135deg,
+                            ${color},
+                            ${color} 3px,
+                            transparent 3px,
+                            transparent 6px
+                          )`,
+                          backgroundColor: color,
+                          opacity: 0.85,
+                        }}
+                      >
+                        <span className="text-xs text-white px-1.5 truncate font-mono drop-shadow-sm">
+                          {t.name} ({t.fetchDuration}ms)
+                        </span>
+                      </div>
                     </div>
-                  </div>
+                  </Tooltip>
                 );
               })}
             </div>
 
-            {/* Hydration marker */}
+            {/* Vertical marker lines */}
+            {lcpDataReady > 0 && (
+              <div
+                className="absolute top-3 bottom-3 w-px bg-blue-400/50 z-0"
+                style={{ left: `calc(${(lcpDataReady / maxMs) * 100}% + 12px)` }}
+              />
+            )}
+            {lcpRendered > 0 && (
+              <div
+                className="absolute top-3 bottom-3 w-px bg-green-400/40 z-0"
+                style={{ left: `calc(${(lcpRendered / maxMs) * 100}% + 12px)` }}
+              />
+            )}
             {hydrationMs > 0 && (
               <div
-                className="absolute top-3 bottom-3 w-px border-l border-dashed border-amber-400/60"
+                className="absolute top-3 bottom-3 w-px border-l border-dashed border-amber-400/60 z-0"
                 style={{
                   left: `calc(${(hydrationMs / maxMs) * 100}% + 12px)`,
                 }}
               />
             )}
+            {csrInitComplete > 0 && (
+              <div
+                className="absolute top-3 bottom-3 w-px bg-purple-400/40 z-0"
+                style={{ left: `calc(${(csrInitComplete / maxMs) * 100}% + 12px)` }}
+              />
+            )}
 
-            {/* Markers */}
-            <div className="relative h-6 mt-1">
-              {hydrationMs > 0 && (
-                <div
-                  className="absolute top-0 flex items-center"
-                  style={{ left: `${(hydrationMs / maxMs) * 100}%` }}
-                >
-                  <div className="w-px h-4 bg-amber-400" />
-                  <span className="text-xs text-amber-400 ml-1 font-mono whitespace-nowrap">
-                    Hydration @ {Math.round(hydrationMs)}ms
-                  </span>
-                </div>
-              )}
-            </div>
-            <div className="relative h-6">
-              {csrInitComplete > 0 && (
-                <div
-                  className="absolute top-0 flex items-center"
-                  style={{
-                    left: `${(csrInitComplete / maxMs) * 100}%`,
-                  }}
-                >
-                  <div className="w-px h-4 bg-purple-400" />
-                  <span className="text-xs text-purple-400 ml-1 font-mono whitespace-nowrap">
-                    Init complete @ {Math.round(csrInitComplete)}ms
-                  </span>
-                </div>
-              )}
-            </div>
           </div>
         </div>
       )}
@@ -653,7 +800,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
           </div>
 
           {aggregatedLoaf.length > 0 ? (
-            <div className="space-y-1.5 relative">
+            <div className="space-y-1.5 relative z-10">
               {aggregatedLoaf.map((entry, i) => {
                 const leftPct = (entry.startTime / maxMs) * 100;
                 const totalWidthPct = Math.max(
@@ -673,38 +820,54 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
                         .join(", ")
                     : "";
 
+                const loafLines: TooltipLine[] = [
+                  { label: "Start", value: `${Math.round(entry.startTime)}ms` },
+                  { label: "Total duration", value: `${Math.round(entry.duration)}ms` },
+                  { label: "Blocking", value: `${Math.round(entry.blockingDuration)}ms`, color: "text-red-400" },
+                  ...entry.scripts.map((s) => {
+                    const file = s.sourceURL.split("/").pop() ?? s.sourceURL;
+                    const fn = s.sourceFunctionName || "(anonymous)";
+                    return { label: fn, value: `${file} (${s.duration}ms)`, color: "text-zinc-400" as string };
+                  }),
+                ];
+
                 return (
-                  <div key={i} className="relative h-7">
-                    {/* Total duration (dimmer) */}
-                    <div
-                      className="absolute top-0 h-full rounded overflow-hidden"
-                      style={{
-                        left: `${leftPct}%`,
-                        width: `${totalWidthPct}%`,
-                        backgroundColor: "rgb(239, 68, 68)",
-                        opacity: 0.3,
-                      }}
-                    />
-                    {/* Blocking duration (bright) */}
-                    <div
-                      className="absolute top-0 h-full rounded flex items-center overflow-hidden"
-                      style={{
-                        left: `${leftPct}%`,
-                        width: `${Math.max(blockingWidthPct, 1)}%`,
-                        backgroundColor: "rgb(239, 68, 68)",
-                        opacity: 0.8,
-                      }}
-                    >
-                      <span className="text-xs text-white px-1.5 truncate font-mono">
-                        {Math.round(entry.blockingDuration)}ms blocking
-                        {scriptSummary && (
-                          <span className="text-red-200 ml-1">
-                            {scriptSummary}
-                          </span>
-                        )}
-                      </span>
+                  <Tooltip
+                    key={i}
+                    content={<TooltipContent title="Long Animation Frame" lines={loafLines} tag="LoAF" />}
+                  >
+                    <div className="relative h-7">
+                      {/* Total duration (dimmer) */}
+                      <div
+                        className="absolute top-0 h-full rounded overflow-hidden cursor-default"
+                        style={{
+                          left: `${leftPct}%`,
+                          width: `${totalWidthPct}%`,
+                          backgroundColor: "rgb(239, 68, 68)",
+                          opacity: 0.3,
+                        }}
+                      />
+                      {/* Blocking duration (bright) */}
+                      <div
+                        className="absolute top-0 h-full rounded flex items-center overflow-hidden cursor-default"
+                        style={{
+                          left: `${leftPct}%`,
+                          width: `${Math.max(blockingWidthPct, 1)}%`,
+                          backgroundColor: "rgb(239, 68, 68)",
+                          opacity: 0.8,
+                        }}
+                      >
+                        <span className="text-xs text-white px-1.5 truncate font-mono">
+                          {Math.round(entry.blockingDuration)}ms blocking
+                          {scriptSummary && (
+                            <span className="text-red-200 ml-1">
+                              {scriptSummary}
+                            </span>
+                          )}
+                        </span>
+                      </div>
                     </div>
-                  </div>
+                  </Tooltip>
                 );
               })}
             </div>
@@ -716,13 +879,31 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
             </div>
           )}
 
-          {/* Hydration marker */}
+          {/* Vertical marker lines */}
+          {lcpDataReady > 0 && (
+            <div
+              className="absolute top-3 bottom-3 w-px bg-blue-400/50 z-0"
+              style={{ left: `calc(${(lcpDataReady / maxMs) * 100}% + 12px)` }}
+            />
+          )}
+          {lcpRendered > 0 && (
+            <div
+              className="absolute top-3 bottom-3 w-px bg-green-400/40 z-0"
+              style={{ left: `calc(${(lcpRendered / maxMs) * 100}% + 12px)` }}
+            />
+          )}
           {hydrationMs > 0 && (
             <div
-              className="absolute top-3 bottom-3 w-px border-l border-dashed border-amber-400/60"
+              className="absolute top-3 bottom-3 w-px border-l border-dashed border-amber-400/60 z-0"
               style={{
                 left: `calc(${(hydrationMs / maxMs) * 100}% + 12px)`,
               }}
+            />
+          )}
+          {csrInitComplete > 0 && (
+            <div
+              className="absolute top-3 bottom-3 w-px bg-purple-400/40 z-0"
+              style={{ left: `calc(${(csrInitComplete / maxMs) * 100}% + 12px)` }}
             />
           )}
         </div>

@@ -8,11 +8,21 @@ import { clientMetricsStore, type ClientMetrics } from "@/lib/client-metrics-sto
 
 const PERCENTILE_OPTIONS = [50, 75, 90, 95, 99] as const;
 
+const PAGE_TYPES = [
+  { value: "pdp", label: "PDP", route: "/products/[sku]", enabled: true },
+  { value: "search", label: "Search Results", route: "/search", enabled: false },
+  { value: "category", label: "Category Page", route: "/c/[slug]", enabled: false },
+  { value: "checkout", label: "Checkout", route: "/checkout", enabled: false },
+] as const;
+
 export default function DashboardPage() {
   const [metrics, setMetrics] = useState<ClientMetrics | null>(null);
   const [activeTab, setActiveTab] = useState<"lcp" | "tree" | "subgraphs">("lcp");
   const [loading, setLoading] = useState(true);
   const [pctl, setPctl] = useState<number>(99);
+  const [pageType, setPageType] = useState("pdp");
+
+  const currentPage = PAGE_TYPES.find((p) => p.value === pageType) ?? PAGE_TYPES[0];
 
   const refreshMetrics = useCallback(() => {
     setLoading(true);
@@ -22,7 +32,7 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    refreshMetrics();
+    clientMetricsStore.seedIfFirstVisit().then(() => refreshMetrics());
   }, [refreshMetrics]);
 
   function clearMetrics() {
@@ -30,19 +40,40 @@ export default function DashboardPage() {
     refreshMetrics();
   }
 
+  async function loadDemoData() {
+    setLoading(true);
+    await clientMetricsStore.loadSeedData();
+    refreshMetrics();
+  }
+
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 p-4 md:p-6 font-mono overflow-x-hidden">
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 px-4 py-8 md:px-6 md:py-12 font-mono overflow-x-hidden">
       <div className="max-w-7xl mx-auto space-y-4 md:space-y-6">
         {/* Header */}
         <div className="flex items-start sm:items-center justify-between gap-3">
           <div className="min-w-0">
             <h1 className="text-lg md:text-xl font-bold text-white">
-              Suspense Boundary Monitor
+              Critical Initialization Path Dashboard
             </h1>
-            <p className="text-xs md:text-sm text-zinc-500 mt-1 truncate">
-              /products/[sku] &mdash;{" "}
-              {metrics ? `${metrics.totalPageLoads} page loads` : "loading..."}
-            </p>
+            <div className="flex items-center gap-3 mt-1">
+              <div className="flex items-center gap-1.5">
+                <select
+                  value={pageType}
+                  onChange={(e) => setPageType(e.target.value)}
+                  className="bg-zinc-800 border border-zinc-700 rounded px-2 py-0.5 text-xs text-zinc-300 font-mono focus:outline-none focus:border-zinc-500"
+                >
+                  {PAGE_TYPES.map((pt) => (
+                    <option key={pt.value} value={pt.value} disabled={!pt.enabled}>
+                      {pt.label}{!pt.enabled ? " (coming soon)" : ""}
+                    </option>
+                  ))}
+                </select>
+                <span className="text-xs text-zinc-500 truncate">
+                  {currentPage.route} &mdash;{" "}
+                  {metrics ? `${metrics.totalPageLoads} page loads` : "loading..."}
+                </span>
+              </div>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -119,15 +150,22 @@ export default function DashboardPage() {
           ) : metrics && metrics.totalPageLoads === 0 ? (
             <div className="text-center py-12 text-zinc-500">
               <p>No metrics data yet.</p>
-              <p className="text-sm mt-2">
+              <p className="text-sm mt-3">
                 Visit the{" "}
                 <a href="/products/demo-sku" className="text-blue-400 hover:text-blue-300 underline">
                   product page
                 </a>{" "}
-                and reload a couple of times to collect performance metrics.
+                and reload a couple of times to collect performance metrics,
               </p>
-              <p className="text-xs mt-1 text-zinc-600">
-                Metrics are automatically captured on each page load and stored in your browser (localStorage).
+              <p className="text-sm mt-1">
+                or{" "}
+                <button
+                  onClick={loadDemoData}
+                  className="text-blue-400 hover:text-blue-300 underline"
+                >
+                  load demo data
+                </button>{" "}
+                to explore the dashboard with sample metrics.
               </p>
             </div>
           ) : activeTab === "lcp" ? (

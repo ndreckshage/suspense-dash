@@ -14,6 +14,9 @@ import { GQL_QUERIES, SUBGRAPH_OPERATIONS } from "./gql-federation";
  *   ~2% — very slow (3–5× baseMs, simulating GC pauses / cold starts)
  */
 async function simulateSubgraphOp(baseMs: number): Promise<number> {
+  const ctx = getRequestContext();
+  const effectiveBase = ctx.slowMode ? baseMs * 20 : baseMs;
+
   const roll = Math.random();
   let multiplier: number;
 
@@ -31,7 +34,7 @@ async function simulateSubgraphOp(baseMs: number): Promise<number> {
     multiplier = 1.35 + Math.random() * 0.3;
   }
 
-  const actualMs = Math.max(5, Math.round(baseMs * multiplier));
+  const actualMs = Math.max(5, Math.round(effectiveBase * multiplier));
   await sleep(actualMs);
   return actualMs;
 }

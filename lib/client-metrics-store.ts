@@ -57,7 +57,9 @@ export interface ClientMetrics {
  * deserializing stale data from a previous deploy.
  */
 const SCHEMA_VERSION = 2;
-const STORAGE_KEY = `suspense-dashboard-metrics-v${SCHEMA_VERSION}`;
+const GIT_COMMIT = process.env.NEXT_PUBLIC_GIT_COMMIT ?? "dev";
+const STORAGE_KEY = `suspense-dashboard-metrics-v${SCHEMA_VERSION}-${GIT_COMMIT}`;
+const SEEDED_KEY = `suspense-dashboard-seeded-${GIT_COMMIT}`;
 const MAX_PAGE_LOADS = 100;
 
 function loadFromStorage(): ClientMetrics {
@@ -223,10 +225,49 @@ export const clientMetricsStore = {
 
   clear() {
     saveToStorage(emptyMetrics());
+    // Mark that user has seen the dashboard — don't auto-seed again
+    try { localStorage.setItem(SEEDED_KEY, "1"); } catch {}
   },
 
   /** How many page loads are currently stored */
   getPageLoadCount(): number {
     return loadFromStorage().totalPageLoads;
+  },
+
+  /** Fetch seed data from /seed-metrics.json and populate localStorage */
+  async loadSeedData(): Promise<boolean> {
+    if (typeof window === "undefined") return false;
+
+    try {
+      const res = await fetch("/seed-metrics.json");
+      if (!res.ok) return false;
+      const seed = await res.json();
+      if (seed && Array.isArray(seed.boundaries) && seed.boundaries.length > 0) {
+        seed.totalPageLoads = countPageLoads(seed.boundaries);
+        saveToStorage(seed as ClientMetrics);
+        try { localStorage.setItem(SEEDED_KEY, "1"); } catch {}
+        return true;
+      }
+    } catch {
+      // Seed file unavailable
+    }
+    return false;
+  },
+
+  /**
+   * Auto-seed on very first visit (no seeded flag and no data).
+   * Returns true if seeding occurred.
+   */
+  async seedIfFirstVisit(): Promise<boolean> {
+    if (typeof window === "undefined") return false;
+    // If we've ever seeded or user has cleared, don't auto-seed
+    try {
+      if (localStorage.getItem(SEEDED_KEY)) return false;
+    } catch { return false; }
+
+    const current = loadFromStorage();
+    if (current.totalPageLoads > 0 || current.boundaries.length > 0) return false;
+
+    return this.loadSeedData();
   },
 };
