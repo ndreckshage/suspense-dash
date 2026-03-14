@@ -16,6 +16,17 @@ export async function simulatedFetch<T>(
 
 // --- Mock data generators ---
 
+export function mockExperimentContext() {
+  return {
+    userId: "usr_abc123",
+    experiments: {
+      "pdp-layout-v2": "treatment",
+      "new-checkout": "control",
+    },
+    defaultPostalCode: "98101",
+  };
+}
+
 export function mockNavData() {
   return {
     categories: [
@@ -28,23 +39,10 @@ export function mockNavData() {
   };
 }
 
-export function mockSessionConfig() {
+export function mockContentLayout() {
   return {
-    userId: "usr_abc123",
-    featureFlags: { newCheckout: true, darkMode: true },
-  };
-}
-
-export function mockProductData(sku: string) {
-  return {
-    sku,
-    name: "Nikon D7000 Digital Camera",
-    brand: "Nikon",
-    heroImageUrl: "/placeholder-hero.svg",
-    shortDescription:
-      "16.2MP DX-format CMOS sensor with 1080p video and 39-point AF system.",
-    rating: 4.6,
-    reviewCount: 1247,
+    template: "pdp-standard",
+    sections: ["breadcrumbs", "main", "carousels", "reviews"],
   };
 }
 
@@ -57,23 +55,68 @@ export function mockBreadcrumbs() {
   ];
 }
 
-export function mockProductDetails() {
+export function mockHeroImage() {
   return {
-    price: 899.99,
-    originalPrice: 1199.99,
-    currency: "USD",
-    inStock: true,
+    heroImage: "https://picsum.photos/id/250/800/800",
+  };
+}
+
+export function mockThumbnails() {
+  return {
+    thumbnails: [
+      "https://picsum.photos/id/250/200/200",
+      "https://picsum.photos/id/251/200/200",
+      "https://picsum.photos/id/252/200/200",
+      "https://picsum.photos/id/253/200/200",
+    ],
+  };
+}
+
+export function mockProductInfo(sku: string) {
+  return {
+    sku,
+    name: "Nikon D7000 Digital Camera",
+    brand: "Nikon",
+    shortDescription:
+      "16.2MP DX-format CMOS sensor with 1080p video and 39-point AF system.",
+    rating: 4.6,
+    reviewCount: 1247,
+    bullets: [
+      "16.2MP DX-format CMOS sensor for stunning image quality",
+      "39-point autofocus system with 3D tracking",
+      "Full HD 1080p video with full-time AF",
+      "100% viewfinder frame coverage",
+      "Magnesium alloy body with weather sealing",
+    ],
+    specs: [
+      { label: "Sensor", value: "16.2MP DX CMOS" },
+      { label: "ISO Range", value: "100\u201325600" },
+      { label: "AF Points", value: "39-point" },
+      { label: "Weight", value: "780g" },
+    ],
     variants: [
       { name: "Body Only", value: "body", available: true },
       { name: "18-105mm Kit", value: "kit-18-105", available: true },
       { name: "18-200mm Kit", value: "kit-18-200", available: false },
     ],
-    specs: [
-      { label: "Sensor", value: "16.2MP DX CMOS" },
-      { label: "ISO Range", value: "100–25600" },
-      { label: "AF Points", value: "39-point" },
-      { label: "Weight", value: "780g" },
-    ],
+  };
+}
+
+export function mockProductPricing() {
+  return {
+    price: 899.99,
+    originalPrice: 1199.99,
+    currency: "USD",
+    inventory: {
+      status: "In Stock",
+      quantity: 23,
+      warehouse: "Seattle-WA",
+    },
+    reviewSummary: {
+      average: 4.6,
+      total: 1247,
+      distribution: [5, 62, 23, 7, 3],
+    },
   };
 }
 
@@ -94,7 +137,7 @@ export function mockReviews() {
   const reviewTexts = [
     "Incredible image quality. Sharp and vibrant even in low light.",
     "The autofocus is lightning fast. Perfect for action shots.",
-    "Great build quality — feels solid and weather-sealed.",
+    "Great build quality \u2014 feels solid and weather-sealed.",
     "Video mode is excellent. 1080p looks fantastic.",
     "Ergonomics are perfect. Comfortable to shoot all day.",
     "Best value DSLR in this class. Highly recommend.",

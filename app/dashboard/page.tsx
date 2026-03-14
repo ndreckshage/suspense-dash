@@ -4,18 +4,28 @@ import { useState, useEffect, useCallback } from "react";
 import { BoundaryTreeTable } from "@/components/dashboard/BoundaryTreeTable";
 import { LcpCriticalPath } from "@/components/dashboard/LcpCriticalPath";
 import { LoadGenerator } from "@/components/dashboard/LoadGenerator";
-import type { BoundaryMetric, FetchMetric } from "@/lib/metrics-store";
+import type {
+  BoundaryMetric,
+  FetchMetric,
+  QueryMetric,
+  SubgraphOperationMetric,
+} from "@/lib/metrics-store";
 
 interface MetricsResponse {
   boundaries: BoundaryMetric[];
   fetches: FetchMetric[];
+  queries: QueryMetric[];
+  subgraphOps: SubgraphOperationMetric[];
   totalPageLoads: number;
 }
+
+const PERCENTILE_OPTIONS = [50, 75, 90, 95, 99] as const;
 
 export default function DashboardPage() {
   const [metrics, setMetrics] = useState<MetricsResponse | null>(null);
   const [activeTab, setActiveTab] = useState<"tree" | "lcp">("tree");
   const [loading, setLoading] = useState(true);
+  const [pctl, setPctl] = useState<number>(99);
 
   const fetchMetrics = useCallback(async () => {
     setLoading(true);
@@ -59,28 +69,44 @@ export default function DashboardPage() {
         {/* Load Generator */}
         <LoadGenerator onComplete={fetchMetrics} />
 
-        {/* Tab navigation */}
-        <div className="flex gap-1 border-b border-zinc-800">
-          <button
-            onClick={() => setActiveTab("tree")}
-            className={`px-4 py-2 text-sm transition-colors border-b-2 -mb-px ${
-              activeTab === "tree"
-                ? "border-blue-500 text-white"
-                : "border-transparent text-zinc-500 hover:text-zinc-300"
-            }`}
-          >
-            Boundary Tree
-          </button>
-          <button
-            onClick={() => setActiveTab("lcp")}
-            className={`px-4 py-2 text-sm transition-colors border-b-2 -mb-px ${
-              activeTab === "lcp"
-                ? "border-blue-500 text-white"
-                : "border-transparent text-zinc-500 hover:text-zinc-300"
-            }`}
-          >
-            LCP Critical Path
-          </button>
+        {/* Tab navigation + percentile selector */}
+        <div className="flex items-center justify-between border-b border-zinc-800">
+          <div className="flex gap-1">
+            <button
+              onClick={() => setActiveTab("tree")}
+              className={`px-4 py-2 text-sm transition-colors border-b-2 -mb-px ${
+                activeTab === "tree"
+                  ? "border-blue-500 text-white"
+                  : "border-transparent text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              Boundary Tree
+            </button>
+            <button
+              onClick={() => setActiveTab("lcp")}
+              className={`px-4 py-2 text-sm transition-colors border-b-2 -mb-px ${
+                activeTab === "lcp"
+                  ? "border-blue-500 text-white"
+                  : "border-transparent text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              LCP Critical Path
+            </button>
+          </div>
+          <div className="flex items-center gap-2 pb-1">
+            <span className="text-xs text-zinc-500">Percentile:</span>
+            <select
+              value={pctl}
+              onChange={(e) => setPctl(Number(e.target.value))}
+              className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-300 font-mono focus:outline-none focus:border-zinc-500"
+            >
+              {PERCENTILE_OPTIONS.map((p) => (
+                <option key={p} value={p}>
+                  p{p}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {/* Content */}
@@ -92,12 +118,15 @@ export default function DashboardPage() {
           ) : activeTab === "tree" ? (
             <BoundaryTreeTable
               boundaries={metrics?.boundaries ?? []}
-              fetches={metrics?.fetches ?? []}
+              queries={metrics?.queries ?? []}
+              subgraphOps={metrics?.subgraphOps ?? []}
+              pctl={pctl}
             />
           ) : (
             <LcpCriticalPath
               boundaries={metrics?.boundaries ?? []}
-              fetches={metrics?.fetches ?? []}
+              queries={metrics?.queries ?? []}
+              pctl={pctl}
             />
           )}
         </div>

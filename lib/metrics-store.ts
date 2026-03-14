@@ -23,59 +23,69 @@ export interface FetchMetric {
   duration_ms: number;
 }
 
+export interface SubgraphOperationMetric {
+  timestamp: number;
+  requestId: string;
+  route: string;
+  boundary_path: string;
+  queryName: string;
+  operationName: string;
+  subgraphName: string;
+  duration_ms: number;
+  cached: boolean;
+}
+
+export interface QueryMetric {
+  timestamp: number;
+  requestId: string;
+  route: string;
+  boundary_path: string;
+  queryName: string;
+  duration_ms: number;
+  subgraphOps: string[];
+  cachedOps: string[];
+  fullyCached: boolean;
+}
+
 const MAX_PAGE_LOADS = 200;
 
 class MetricsStore {
   private boundaryMetrics: BoundaryMetric[] = [];
   private fetchMetrics: FetchMetric[] = [];
+  private subgraphOpMetrics: SubgraphOperationMetric[] = [];
+  private queryMetrics: QueryMetric[] = [];
   private requestIds: Set<string> = new Set();
 
   recordBoundary(metric: BoundaryMetric) {
     this.requestIds.add(metric.requestId);
     this.boundaryMetrics.push(metric);
     this.trimIfNeeded();
-
-    // DATADOG INTEGRATION:
-    // Replace this call with:
-    //
-    // import { metrics } from 'datadog-metrics';
-    // metrics.histogram('suspense.boundary.render_ms', metric.render_duration_ms, {
-    //   boundary_path: metric.boundary_path,
-    //   route: metric.route,
-    //   is_lcp_critical: String(metric.is_lcp_critical),
-    // });
-    //
-    // metrics.histogram('suspense.boundary.wall_start_ms', metric.wall_start_ms, {
-    //   boundary_path: metric.boundary_path,
-    //   route: metric.route,
-    // });
-    //
-    // Dashboard query examples:
-    // - p99 by boundary: avg:suspense.boundary.render_ms{route:/products/*}.rollup(p99) by {boundary_path}
-    // - LCP critical path: avg:suspense.boundary.render_ms{is_lcp_critical:true,route:/products/*}.rollup(p99) by {boundary_path}
-    // - SLO monitor: suspense.boundary.render_ms p99 > threshold by boundary_path
   }
 
   recordFetch(metric: FetchMetric) {
     this.requestIds.add(metric.requestId);
     this.fetchMetrics.push(metric);
     this.trimIfNeeded();
+  }
 
-    // DATADOG INTEGRATION:
-    // Replace this call with:
-    //
-    // import { metrics } from 'datadog-metrics';
-    // metrics.histogram('suspense.fetch.duration_ms', metric.duration_ms, {
-    //   fetch_name: metric.fetch_name,
-    //   boundary_path: metric.boundary_path,
-    //   route: metric.route,
-    // });
+  recordSubgraphOp(metric: SubgraphOperationMetric) {
+    this.requestIds.add(metric.requestId);
+    this.subgraphOpMetrics.push(metric);
+    this.trimIfNeeded();
+  }
+
+  recordQuery(metric: QueryMetric) {
+    this.requestIds.add(metric.requestId);
+    this.queryMetrics.push(metric);
+    this.trimIfNeeded();
   }
 
   getMetrics() {
     return {
       boundaries: [...this.boundaryMetrics],
       fetches: [...this.fetchMetrics],
+      subgraphOps: [...this.subgraphOpMetrics],
+      queries: [...this.queryMetrics],
       totalPageLoads: this.requestIds.size,
     };
   }
@@ -83,13 +93,14 @@ class MetricsStore {
   clear() {
     this.boundaryMetrics = [];
     this.fetchMetrics = [];
+    this.subgraphOpMetrics = [];
+    this.queryMetrics = [];
     this.requestIds = new Set();
   }
 
   private trimIfNeeded() {
     if (this.requestIds.size <= MAX_PAGE_LOADS) return;
 
-    // Find oldest request IDs to remove
     const sortedBoundaries = this.boundaryMetrics.sort(
       (a, b) => a.timestamp - b.timestamp
     );
@@ -112,6 +123,12 @@ class MetricsStore {
     this.fetchMetrics = this.fetchMetrics.filter(
       (m) => !toRemove.has(m.requestId)
     );
+    this.subgraphOpMetrics = this.subgraphOpMetrics.filter(
+      (m) => !toRemove.has(m.requestId)
+    );
+    this.queryMetrics = this.queryMetrics.filter(
+      (m) => !toRemove.has(m.requestId)
+    );
     for (const id of toRemove) {
       this.requestIds.delete(id);
     }
@@ -121,11 +138,12 @@ class MetricsStore {
 // Singleton via globalThis — ensures the same instance is shared across all
 // module evaluations in the same Node.js process (important in dev mode where
 // Next.js/Turbopack may re-evaluate modules).
-const globalKey = "__suspense_metrics_store__" as const;
+// Version key ensures stale instances (missing new methods) are replaced on hot reload.
+const globalKey = "__suspense_metrics_store_v6__" as const;
 
 declare global {
   // eslint-disable-next-line no-var
-  var __suspense_metrics_store__: MetricsStore | undefined;
+  var __suspense_metrics_store_v6__: MetricsStore | undefined;
 }
 
 export const metricsStore: MetricsStore =

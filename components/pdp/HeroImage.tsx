@@ -1,13 +1,12 @@
 /**
- * LCP hero image — rendered directly in the initial HTML payload (no Suspense).
- * Only the image itself lives here. Product title/description are in a separate
- * Suspense boundary so the image is the only non-skeleton content on first paint.
+ * LCP hero image — rendered inside a Suspense boundary that fetches
+ * product media data (getProductMedia query).
  */
-export function HeroImage() {
+export function HeroImage({ imageUrl }: { imageUrl: string }) {
   return (
     <div className="px-6 py-6">
       <img
-        src="https://picsum.photos/id/250/800/800"
+        src={imageUrl}
         alt="Nikon D7000 Camera"
         width={800}
         height={800}
@@ -19,8 +18,8 @@ export function HeroImage() {
 }
 
 /**
- * Product summary shown alongside/below the hero image.
- * Rendered inside a Suspense boundary so it doesn't block the hero.
+ * Product summary: title, description, review stars.
+ * Rendered inside the pdp Suspense boundary (getProductPage query).
  */
 export function ProductSummary({
   product,
