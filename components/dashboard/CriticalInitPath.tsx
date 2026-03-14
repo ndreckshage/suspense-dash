@@ -510,7 +510,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
 
           {/* Waterfall marker: shell end */}
 
-          <div className="space-y-1.5 relative">
+          <div className="space-y-1.5 relative z-10">
             {timings
               .filter((t) => t.name !== "Layout")
               .map((t) => {
@@ -566,25 +566,25 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
           {/* Vertical marker lines */}
           {lcpDataReady > 0 && (
             <div
-              className="absolute top-0 bottom-0 w-px bg-blue-400/50"
+              className="absolute top-0 bottom-0 w-px bg-blue-400/50 z-0"
               style={{ left: `calc(${(lcpDataReady / maxMs) * 100}% + 12px)` }}
             />
           )}
           {lcpRendered > 0 && (
             <div
-              className="absolute top-0 bottom-0 w-px bg-green-400/40"
+              className="absolute top-0 bottom-0 w-px bg-green-400/40 z-0"
               style={{ left: `calc(${(lcpRendered / maxMs) * 100}% + 12px)` }}
             />
           )}
           {hydrationMs > 0 && (
             <div
-              className="absolute top-0 bottom-0 w-px border-l border-dashed border-amber-400/60"
+              className="absolute top-0 bottom-0 w-px border-l border-dashed border-amber-400/60 z-0"
               style={{ left: `calc(${(hydrationMs / maxMs) * 100}% + 12px)` }}
             />
           )}
           {csrInitComplete > 0 && (
             <div
-              className="absolute top-0 bottom-0 w-px bg-purple-400/40"
+              className="absolute top-0 bottom-0 w-px bg-purple-400/40 z-0"
               style={{ left: `calc(${(csrInitComplete / maxMs) * 100}% + 12px)` }}
             />
           )}
@@ -609,7 +609,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
             ))}
           </div>
 
-          <div className="relative h-8">
+          <div className="relative h-8 z-10">
             {renderBlocks.map((block) => {
               const leftPct = (block.start / maxMs) * 100;
               const widthPct = Math.max((block.duration / maxMs) * 100, 1.5);
@@ -653,25 +653,25 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
           {/* Vertical marker lines */}
           {lcpDataReady > 0 && (
             <div
-              className="absolute top-3 bottom-3 w-px bg-blue-400/50"
+              className="absolute top-3 bottom-3 w-px bg-blue-400/50 z-0"
               style={{ left: `calc(${(lcpDataReady / maxMs) * 100}% + 12px)` }}
             />
           )}
           {lcpRendered > 0 && (
             <div
-              className="absolute top-3 bottom-3 w-px bg-green-400/40"
+              className="absolute top-3 bottom-3 w-px bg-green-400/40 z-0"
               style={{ left: `calc(${(lcpRendered / maxMs) * 100}% + 12px)` }}
             />
           )}
           {hydrationMs > 0 && (
             <div
-              className="absolute top-3 bottom-3 w-px border-l border-dashed border-amber-400/60"
+              className="absolute top-3 bottom-3 w-px border-l border-dashed border-amber-400/60 z-0"
               style={{ left: `calc(${(hydrationMs / maxMs) * 100}% + 12px)` }}
             />
           )}
           {csrInitComplete > 0 && (
             <div
-              className="absolute top-3 bottom-3 w-px bg-purple-400/40"
+              className="absolute top-3 bottom-3 w-px bg-purple-400/40 z-0"
               style={{ left: `calc(${(csrInitComplete / maxMs) * 100}% + 12px)` }}
             />
           )}
@@ -697,7 +697,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
               ))}
             </div>
 
-            <div className="space-y-1.5 relative">
+            <div className="space-y-1.5 relative z-10">
               {csrTimings.map((t) => {
                 const leftPct = (t.wallStart / maxMs) * 100;
                 const widthPct = Math.max(
@@ -752,19 +752,19 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
             {/* Vertical marker lines */}
             {lcpDataReady > 0 && (
               <div
-                className="absolute top-3 bottom-3 w-px bg-blue-400/50"
+                className="absolute top-3 bottom-3 w-px bg-blue-400/50 z-0"
                 style={{ left: `calc(${(lcpDataReady / maxMs) * 100}% + 12px)` }}
               />
             )}
             {lcpRendered > 0 && (
               <div
-                className="absolute top-3 bottom-3 w-px bg-green-400/40"
+                className="absolute top-3 bottom-3 w-px bg-green-400/40 z-0"
                 style={{ left: `calc(${(lcpRendered / maxMs) * 100}% + 12px)` }}
               />
             )}
             {hydrationMs > 0 && (
               <div
-                className="absolute top-3 bottom-3 w-px border-l border-dashed border-amber-400/60"
+                className="absolute top-3 bottom-3 w-px border-l border-dashed border-amber-400/60 z-0"
                 style={{
                   left: `calc(${(hydrationMs / maxMs) * 100}% + 12px)`,
                 }}
@@ -772,7 +772,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
             )}
             {csrInitComplete > 0 && (
               <div
-                className="absolute top-3 bottom-3 w-px bg-purple-400/40"
+                className="absolute top-3 bottom-3 w-px bg-purple-400/40 z-0"
                 style={{ left: `calc(${(csrInitComplete / maxMs) * 100}% + 12px)` }}
               />
             )}
@@ -800,7 +800,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
           </div>
 
           {aggregatedLoaf.length > 0 ? (
-            <div className="space-y-1.5 relative">
+            <div className="space-y-1.5 relative z-10">
               {aggregatedLoaf.map((entry, i) => {
                 const leftPct = (entry.startTime / maxMs) * 100;
                 const totalWidthPct = Math.max(
@@ -882,19 +882,19 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
           {/* Vertical marker lines */}
           {lcpDataReady > 0 && (
             <div
-              className="absolute top-3 bottom-3 w-px bg-blue-400/50"
+              className="absolute top-3 bottom-3 w-px bg-blue-400/50 z-0"
               style={{ left: `calc(${(lcpDataReady / maxMs) * 100}% + 12px)` }}
             />
           )}
           {lcpRendered > 0 && (
             <div
-              className="absolute top-3 bottom-3 w-px bg-green-400/40"
+              className="absolute top-3 bottom-3 w-px bg-green-400/40 z-0"
               style={{ left: `calc(${(lcpRendered / maxMs) * 100}% + 12px)` }}
             />
           )}
           {hydrationMs > 0 && (
             <div
-              className="absolute top-3 bottom-3 w-px border-l border-dashed border-amber-400/60"
+              className="absolute top-3 bottom-3 w-px border-l border-dashed border-amber-400/60 z-0"
               style={{
                 left: `calc(${(hydrationMs / maxMs) * 100}% + 12px)`,
               }}
@@ -902,7 +902,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
           )}
           {csrInitComplete > 0 && (
             <div
-              className="absolute top-3 bottom-3 w-px bg-purple-400/40"
+              className="absolute top-3 bottom-3 w-px bg-purple-400/40 z-0"
               style={{ left: `calc(${(csrInitComplete / maxMs) * 100}% + 12px)` }}
             />
           )}
