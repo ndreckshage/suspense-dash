@@ -8,9 +8,9 @@ interface FooterData {
 
 export function Footer({ data }: { data: FooterData }) {
   return (
-    <footer className="bg-zinc-900 border-t border-zinc-800 px-6 py-8 mt-8">
+    <footer className="bg-zinc-900 border-t border-zinc-800 px-4 md:px-6 py-8 mt-8">
       <div className="max-w-7xl mx-auto">
-        <div className="grid grid-cols-3 gap-8 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-8 mb-6">
           {data.columns.map((col) => (
             <div key={col.title}>
               <h3 className="text-sm font-semibold text-zinc-300 mb-3">

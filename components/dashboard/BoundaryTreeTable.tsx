@@ -400,7 +400,7 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl }: Pr
           Collapse All
         </button>
       </div>
-      <table className="w-full text-sm font-mono table-fixed">
+      <table className="w-full text-sm font-mono table-fixed" style={{ minWidth: "700px" }}>
         <thead>
           <tr className="text-zinc-500 text-xs border-b border-zinc-800">
             <th className="text-left py-2 px-2 font-normal" style={{ width: "30%" }}>

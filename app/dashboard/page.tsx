@@ -26,22 +26,22 @@ export default function DashboardPage() {
   }, [refreshMetrics]);
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 p-6 font-mono">
-      <div className="max-w-7xl mx-auto space-y-6">
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 p-4 md:p-6 font-mono overflow-x-hidden">
+      <div className="max-w-7xl mx-auto space-y-4 md:space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-white">
+        <div className="flex items-start sm:items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-lg md:text-xl font-bold text-white">
               Suspense Boundary Monitor
             </h1>
-            <p className="text-sm text-zinc-500 mt-1">
+            <p className="text-xs md:text-sm text-zinc-500 mt-1 truncate">
               /products/[sku] &mdash;{" "}
               {metrics ? `${metrics.totalPageLoads} page loads` : "loading..."}
             </p>
           </div>
           <button
             onClick={refreshMetrics}
-            className="px-3 py-1.5 text-sm border border-zinc-700 rounded text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 transition-colors"
+            className="px-3 py-1.5 text-sm border border-zinc-700 rounded text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 transition-colors flex-shrink-0"
           >
             Refresh
           </button>
@@ -51,7 +51,7 @@ export default function DashboardPage() {
         <LoadGenerator onComplete={refreshMetrics} />
 
         {/* Tab navigation + percentile selector */}
-        <div className="flex items-center justify-between border-b border-zinc-800">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800">
           <div className="flex gap-1">
             <button
               onClick={() => setActiveTab("tree")}
@@ -91,7 +91,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Content */}
-        <div className="bg-zinc-900/50 rounded-lg border border-zinc-800 p-4">
+        <div className="bg-zinc-900/50 rounded-lg border border-zinc-800 p-2 md:p-4">
           {loading && !metrics ? (
             <div className="text-center py-12 text-zinc-500 animate-pulse">
               Loading metrics...

@@ -220,7 +220,7 @@ export function LcpCriticalPath({ boundaries, queries, pctl }: Props) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 overflow-x-auto" style={{ minWidth: 0 }}>
       <div className="text-xs text-zinc-500 mb-2">
         Shows how GQL queries overlap on the server, but sync rendering
         serializes on the single Node.js thread.

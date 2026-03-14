@@ -121,7 +121,7 @@ export function LoadGenerator({ onComplete }: LoadGeneratorProps) {
   const atCapacity = currentLoads >= MAX_TOTAL_PAGE_LOADS;
 
   return (
-    <div className="flex items-center gap-4 p-4 bg-zinc-900 rounded-lg border border-zinc-800">
+    <div className="flex flex-wrap items-center gap-3 md:gap-4 p-3 md:p-4 bg-zinc-900 rounded-lg border border-zinc-800">
       <div className="flex items-center gap-2">
         <label className="text-sm text-zinc-400">Requests:</label>
         <input
@@ -142,25 +142,27 @@ export function LoadGenerator({ onComplete }: LoadGeneratorProps) {
         />
       </div>
 
-      <button
-        onClick={generate}
-        disabled={status === "running" || atCapacity}
-        className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${
-          status === "running" || atCapacity
-            ? "bg-zinc-700 text-zinc-400 cursor-not-allowed"
-            : "bg-blue-600 text-white hover:bg-blue-500"
-        }`}
-      >
-        {status === "running" ? "Generating..." : "Generate Load"}
-      </button>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={generate}
+          disabled={status === "running" || atCapacity}
+          className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${
+            status === "running" || atCapacity
+              ? "bg-zinc-700 text-zinc-400 cursor-not-allowed"
+              : "bg-blue-600 text-white hover:bg-blue-500"
+          }`}
+        >
+          {status === "running" ? "Generating..." : "Generate Load"}
+        </button>
 
-      <button
-        onClick={clearMetrics}
-        disabled={status === "running"}
-        className="px-4 py-1.5 rounded text-sm font-medium border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 transition-colors"
-      >
-        Clear
-      </button>
+        <button
+          onClick={clearMetrics}
+          disabled={status === "running"}
+          className="px-4 py-1.5 rounded text-sm font-medium border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 transition-colors"
+        >
+          Clear
+        </button>
+      </div>
 
       {status === "running" && (
         <span className="text-sm text-yellow-400 animate-pulse">
