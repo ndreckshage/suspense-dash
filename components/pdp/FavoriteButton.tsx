@@ -14,7 +14,7 @@ export function FavoriteButton() {
   useEffect(() => {
     // Simulate favorites data arriving after getUserFavorites resolves
     const timer = setTimeout(() => {
-      setStatus(Math.random() > 0.5 ? "saved" : "unsaved");
+      setStatus("unsaved");
     }, 100);
     return () => clearTimeout(timer);
   }, []);
@@ -25,7 +25,7 @@ export function FavoriteButton() {
     <button
       onClick={() => setStatus(isSaved ? "unsaved" : "saved")}
       disabled={status === "loading"}
-      className="absolute top-8 right-8 w-10 h-10 flex items-center justify-center rounded-full bg-zinc-900/70 backdrop-blur-sm border border-zinc-700 hover:border-zinc-500 transition-colors"
+      className="absolute top-4 right-4 w-10 h-10 flex items-center justify-center rounded-full bg-zinc-900/70 backdrop-blur-sm border border-zinc-700 hover:border-zinc-500 transition-colors"
       aria-label={isSaved ? "Remove from favorites" : "Add to favorites"}
     >
       {status === "loading" ? (

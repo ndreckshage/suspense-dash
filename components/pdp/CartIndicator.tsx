@@ -12,7 +12,7 @@ export function CartIndicator() {
   useEffect(() => {
     // Simulate cart data arriving after getUserCart resolves
     const timer = setTimeout(() => {
-      setCount(Math.floor(Math.random() * 4) + 1);
+      setCount(3);
     }, 120);
     return () => clearTimeout(timer);
   }, []);
