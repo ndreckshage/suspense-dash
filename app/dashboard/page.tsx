@@ -32,11 +32,17 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    clientMetricsStore.seedIfEmpty().then(() => refreshMetrics());
+    refreshMetrics();
   }, [refreshMetrics]);
 
   function clearMetrics() {
     clientMetricsStore.clear();
+    refreshMetrics();
+  }
+
+  async function loadDemoData() {
+    setLoading(true);
+    await clientMetricsStore.loadSeedData();
     refreshMetrics();
   }
 
@@ -144,15 +150,22 @@ export default function DashboardPage() {
           ) : metrics && metrics.totalPageLoads === 0 ? (
             <div className="text-center py-12 text-zinc-500">
               <p>No metrics data yet.</p>
-              <p className="text-sm mt-2">
+              <p className="text-sm mt-3">
                 Visit the{" "}
                 <a href="/products/demo-sku" className="text-blue-400 hover:text-blue-300 underline">
                   product page
                 </a>{" "}
-                and reload a couple of times to collect performance metrics.
+                and reload a couple of times to collect performance metrics,
               </p>
-              <p className="text-xs mt-1 text-zinc-600">
-                Metrics are automatically captured on each page load and stored in your browser (localStorage).
+              <p className="text-sm mt-1">
+                or{" "}
+                <button
+                  onClick={loadDemoData}
+                  className="text-blue-400 hover:text-blue-300 underline"
+                >
+                  load demo data
+                </button>{" "}
+                to explore the dashboard with sample metrics.
               </p>
             </div>
           ) : activeTab === "lcp" ? (

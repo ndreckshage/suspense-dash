@@ -231,14 +231,9 @@ export const clientMetricsStore = {
     return loadFromStorage().totalPageLoads;
   },
 
-  /**
-   * If localStorage is empty, fetch seed data from /seed-metrics.json
-   * and populate it. Returns true if seeding occurred.
-   */
-  async seedIfEmpty(): Promise<boolean> {
+  /** Fetch seed data from /seed-metrics.json and populate localStorage */
+  async loadSeedData(): Promise<boolean> {
     if (typeof window === "undefined") return false;
-    const current = loadFromStorage();
-    if (current.totalPageLoads > 0 || current.boundaries.length > 0) return false;
 
     try {
       const res = await fetch("/seed-metrics.json");
@@ -250,7 +245,7 @@ export const clientMetricsStore = {
         return true;
       }
     } catch {
-      // Seed file unavailable — no problem
+      // Seed file unavailable
     }
     return false;
   },
