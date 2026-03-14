@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { BoundaryTreeTable } from "@/components/dashboard/BoundaryTreeTable";
 import { LcpCriticalPath } from "@/components/dashboard/LcpCriticalPath";
+import { SubgraphCallsTab } from "@/components/dashboard/SubgraphCallsTab";
 import { LoadGenerator } from "@/components/dashboard/LoadGenerator";
 import { clientMetricsStore, type ClientMetrics } from "@/lib/client-metrics-store";
 
@@ -10,7 +11,7 @@ const PERCENTILE_OPTIONS = [50, 75, 90, 95, 99] as const;
 
 export default function DashboardPage() {
   const [metrics, setMetrics] = useState<ClientMetrics | null>(null);
-  const [activeTab, setActiveTab] = useState<"tree" | "lcp">("tree");
+  const [activeTab, setActiveTab] = useState<"tree" | "lcp" | "subgraphs">("tree");
   const [loading, setLoading] = useState(true);
   const [pctl, setPctl] = useState<number>(99);
 
@@ -73,6 +74,16 @@ export default function DashboardPage() {
             >
               LCP Critical Path
             </button>
+            <button
+              onClick={() => setActiveTab("subgraphs")}
+              className={`px-4 py-2 text-sm transition-colors border-b-2 -mb-px ${
+                activeTab === "subgraphs"
+                  ? "border-blue-500 text-white"
+                  : "border-transparent text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              Subgraph Calls
+            </button>
           </div>
           <div className="flex items-center gap-2 pb-1">
             <span className="text-xs text-zinc-500">Percentile:</span>
@@ -110,6 +121,12 @@ export default function DashboardPage() {
           ) : activeTab === "tree" ? (
             <BoundaryTreeTable
               boundaries={metrics?.boundaries ?? []}
+              queries={metrics?.queries ?? []}
+              subgraphOps={metrics?.subgraphOps ?? []}
+              pctl={pctl}
+            />
+          ) : activeTab === "subgraphs" ? (
+            <SubgraphCallsTab
               queries={metrics?.queries ?? []}
               subgraphOps={metrics?.subgraphOps ?? []}
               pctl={pctl}

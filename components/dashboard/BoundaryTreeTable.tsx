@@ -11,19 +11,13 @@ import {
   SUBGRAPH_OPERATIONS,
   SUBGRAPHS,
 } from "@/lib/gql-federation";
+import { percentile, median as medianUtil } from "@/lib/percentile";
 
 interface Props {
   boundaries: BoundaryMetric[];
   queries: QueryMetric[];
   subgraphOps: SubgraphOperationMetric[];
   pctl: number;
-}
-
-function percentile(values: number[], p: number): number {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const idx = Math.ceil((p / 100) * sorted.length) - 1;
-  return Math.round(sorted[Math.max(0, idx)]);
 }
 
 // --- Tree structure: boundary → query → subgraph-op ---
@@ -134,12 +128,7 @@ function buildTreeFromMetrics(
   return items;
 }
 
-function median(values: number[]): number {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-}
+const median = medianUtil;
 
 // Boundary-level SLOs
 const BOUNDARY_SLOS: Record<string, number> = {
@@ -211,6 +200,43 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl }: Pr
 
   const expandAll = useCallback(() => setExpanded(new Set(allBoundaryPaths)), [allBoundaryPaths]);
   const collapseAll = useCallback(() => setExpanded(new Set()), []);
+
+  // Subgraph filter — empty means "show all"
+  const [selectedSubgraphs, setSelectedSubgraphs] = useState<Set<string>>(new Set());
+  const toggleSubgraphFilter = useCallback((name: string) => {
+    setSelectedSubgraphs((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }, []);
+  const clearSubgraphFilter = useCallback(() => setSelectedSubgraphs(new Set()), []);
+
+  // Compute which boundaries match the subgraph filter
+  const filteredBoundaryPaths = useMemo(() => {
+    if (selectedSubgraphs.size === 0) return null; // no filter
+    const matching = new Set<string>();
+    for (const op of subgraphOps) {
+      if (selectedSubgraphs.has(op.subgraphName)) {
+        matching.add(op.boundary_path);
+      }
+    }
+    return matching;
+  }, [selectedSubgraphs, subgraphOps]);
+
+  // Call count summary stats (uncached = actual network calls)
+  const callSummary = useMemo(() => {
+    if (subgraphOps.length === 0) return null;
+    const requestIds = new Set(subgraphOps.map((o) => o.requestId));
+    const numRequests = requestIds.size;
+    const uncachedOps = subgraphOps.filter((o) => !o.cached).length;
+    const cachedOps = subgraphOps.filter((o) => o.cached).length;
+    return {
+      callsPerReq: Math.round((uncachedOps / numRequests) * 10) / 10,
+      dedupedPerReq: Math.round((cachedOps / numRequests) * 10) / 10,
+    };
+  }, [subgraphOps]);
 
   const treeNodes = useMemo(() => {
     if (boundaries.length === 0 && queries.length === 0) return [];
@@ -353,14 +379,18 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl }: Pr
     return nodes;
   }, [treeStructure, boundaries, queries, subgraphOps, pctl]);
 
-  // Filter visible nodes based on expanded state
+  // Filter visible nodes based on expanded state + subgraph filter
   const visibleNodes = useMemo(() => {
     return treeNodes.filter((node) => {
+      // Apply subgraph filter first
+      if (filteredBoundaryPaths && !filteredBoundaryPaths.has(node.boundaryPath)) {
+        return false;
+      }
       if (node.type === "boundary") return true;
       // Non-boundary nodes are visible if their parent boundary is expanded
       return expanded.has(node.boundaryPath);
     });
-  }, [treeNodes, expanded]);
+  }, [treeNodes, expanded, filteredBoundaryPaths]);
 
   if (treeNodes.length === 0) {
     return (
@@ -374,18 +404,53 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl }: Pr
 
   return (
     <div className="overflow-x-auto">
-      {/* Subgraph legend */}
-      <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3 text-xs text-zinc-500">
-        {Object.entries(SUBGRAPHS).map(([name, { color }]) => (
-          <span key={name} className="flex items-center gap-1.5">
-            <span
-              className="w-2 h-2 rounded-full flex-shrink-0"
-              style={{ backgroundColor: color }}
-            />
-            {name.replace("-subgraph", "")}
-          </span>
-        ))}
+      {/* Subgraph filter chips */}
+      <div className="flex flex-wrap items-center gap-x-1 gap-y-1 mb-2 text-xs">
+        <span className="text-zinc-600 mr-1">Filter:</span>
+        {Object.entries(SUBGRAPHS).map(([name, { color }]) => {
+          const isActive = selectedSubgraphs.has(name);
+          const hasFilter = selectedSubgraphs.size > 0;
+          return (
+            <button
+              key={name}
+              onClick={() => toggleSubgraphFilter(name)}
+              className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border transition-all ${
+                isActive
+                  ? "border-zinc-500 text-zinc-200 bg-zinc-800"
+                  : hasFilter
+                    ? "border-transparent text-zinc-600 opacity-50 hover:opacity-80"
+                    : "border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50"
+              }`}
+            >
+              <span
+                className="w-2 h-2 rounded-full flex-shrink-0"
+                style={{ backgroundColor: color }}
+              />
+              {name.replace("-subgraph", "")}
+            </button>
+          );
+        })}
+        {selectedSubgraphs.size > 0 && (
+          <button
+            onClick={clearSubgraphFilter}
+            className="text-zinc-500 hover:text-zinc-300 ml-2 underline"
+          >
+            Clear
+          </button>
+        )}
       </div>
+      {/* Call count summary */}
+      {callSummary && (
+        <div className="flex gap-4 mb-2 text-xs text-zinc-500">
+          <span>{callSummary.callsPerReq} subgraph calls/req</span>
+          {callSummary.dedupedPerReq > 0 && (
+            <>
+              <span className="text-zinc-700">|</span>
+              <span>{callSummary.dedupedPerReq} saved by dedup</span>
+            </>
+          )}
+        </div>
+      )}
       <div className="flex gap-2 mb-2 justify-end">
         <button
           onClick={expandAll}
@@ -463,13 +528,18 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl }: Pr
                   : "text-zinc-600";
 
             const isExpanded = node.type === "boundary" && expanded.has(node.boundaryPath);
+            const isDimmedByFilter =
+              selectedSubgraphs.size > 0 &&
+              node.type === "subgraph-op" &&
+              node.subgraphName != null &&
+              !selectedSubgraphs.has(node.subgraphName);
 
             return (
               <tr
                 key={node.path}
                 className={`border-b border-zinc-800/50 hover:bg-zinc-800/30 ${
                   node.lcpCritical ? "border-l-2 border-l-blue-500/50" : ""
-                }`}
+                } ${isDimmedByFilter ? "opacity-30" : ""}`}
               >
                 <td className="py-1.5 px-2">
                   <div
