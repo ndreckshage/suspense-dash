@@ -5,7 +5,7 @@ export default function Home() {
     <div className="flex min-h-screen items-center justify-center">
       <div className="text-center space-y-6">
         <h1 className="text-2xl font-bold text-white">
-          Suspense Boundary Performance Monitor
+          Critical Initialization Path Dashboard
         </h1>
         <p className="text-zinc-400 max-w-md">
           Instrumented mock ecommerce PDP with per-boundary render/fetch metrics

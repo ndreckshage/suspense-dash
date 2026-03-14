@@ -35,7 +35,7 @@ export function mockNavData() {
       { name: "Cameras", href: "/c/cameras" },
       { name: "Accessories", href: "/c/accessories" },
     ],
-    logo: "ACME Store",
+    logo: "ShutterSpeed",
   };
 }
 
@@ -171,6 +171,6 @@ export function mockFooterData() {
         links: ["About", "Careers", "Press", "Blog"],
       },
     ],
-    copyright: "2026 ACME Store. All rights reserved.",
+    copyright: "2026 ShutterSpeed. All rights reserved.",
   };
 }

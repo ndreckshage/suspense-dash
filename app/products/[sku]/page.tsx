@@ -63,11 +63,17 @@ import { Reviews } from "@/components/pdp/Reviews";
  */
 export default async function PDPPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ sku: string }>;
+  searchParams: Promise<{ slow?: string }>;
 }) {
   const { sku } = await params;
+  const query = await searchParams;
   const ctx = getRequestContext();
+  if (query.slow === "1") {
+    ctx.slowMode = true;
+  }
 
   // --- Layout: blocking experiment context (sequential waterfall) ---
   const layoutStart = Date.now();

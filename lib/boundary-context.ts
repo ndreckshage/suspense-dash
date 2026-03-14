@@ -27,9 +27,11 @@ import { cache } from "react";
 export interface RequestContext {
   requestId: string;
   requestStartTs: number;
+  slowMode: boolean;
 }
 
 export const getRequestContext = cache((): RequestContext => ({
   requestId: crypto.randomUUID(),
   requestStartTs: Date.now(),
+  slowMode: false,
 }));

@@ -29,7 +29,8 @@ export interface ClientMetrics {
  * deserializing stale data from a previous deploy.
  */
 const SCHEMA_VERSION = 1;
-const STORAGE_KEY = `suspense-dashboard-metrics-v${SCHEMA_VERSION}`;
+const GIT_COMMIT = process.env.NEXT_PUBLIC_GIT_COMMIT ?? "dev";
+const STORAGE_KEY = `suspense-dashboard-metrics-v${SCHEMA_VERSION}-${GIT_COMMIT}`;
 const MAX_PAGE_LOADS = 100;
 
 function loadFromStorage(): ClientMetrics {
