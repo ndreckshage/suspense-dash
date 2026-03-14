@@ -506,19 +506,29 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
               })}
           </div>
 
-          {/* LCP data ready marker */}
+          {/* Vertical marker lines */}
           {lcpDataReady > 0 && (
             <div
               className="absolute top-0 bottom-0 w-px bg-blue-400/50"
               style={{ left: `calc(${(lcpDataReady / maxMs) * 100}% + 12px)` }}
             />
           )}
-
-          {/* Hydration marker */}
+          {lcpRendered > 0 && (
+            <div
+              className="absolute top-0 bottom-0 w-px bg-green-400/40"
+              style={{ left: `calc(${(lcpRendered / maxMs) * 100}% + 12px)` }}
+            />
+          )}
           {hydrationMs > 0 && (
             <div
               className="absolute top-0 bottom-0 w-px border-l border-dashed border-amber-400/60"
               style={{ left: `calc(${(hydrationMs / maxMs) * 100}% + 12px)` }}
+            />
+          )}
+          {csrInitComplete > 0 && (
+            <div
+              className="absolute top-0 bottom-0 w-px bg-purple-400/40"
+              style={{ left: `calc(${(csrInitComplete / maxMs) * 100}% + 12px)` }}
             />
           )}
         </div>
@@ -617,11 +627,29 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
             )}
           </div>
 
-          {/* Hydration marker */}
+          {/* Vertical marker lines */}
+          {lcpDataReady > 0 && (
+            <div
+              className="absolute top-3 bottom-3 w-px bg-blue-400/50"
+              style={{ left: `calc(${(lcpDataReady / maxMs) * 100}% + 12px)` }}
+            />
+          )}
+          {lcpRendered > 0 && (
+            <div
+              className="absolute top-3 bottom-3 w-px bg-green-400/40"
+              style={{ left: `calc(${(lcpRendered / maxMs) * 100}% + 12px)` }}
+            />
+          )}
           {hydrationMs > 0 && (
             <div
               className="absolute top-3 bottom-3 w-px border-l border-dashed border-amber-400/60"
               style={{ left: `calc(${(hydrationMs / maxMs) * 100}% + 12px)` }}
+            />
+          )}
+          {csrInitComplete > 0 && (
+            <div
+              className="absolute top-3 bottom-3 w-px bg-purple-400/40"
+              style={{ left: `calc(${(csrInitComplete / maxMs) * 100}% + 12px)` }}
             />
           )}
         </div>
@@ -698,13 +726,31 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
               })}
             </div>
 
-            {/* Hydration marker */}
+            {/* Vertical marker lines */}
+            {lcpDataReady > 0 && (
+              <div
+                className="absolute top-3 bottom-3 w-px bg-blue-400/50"
+                style={{ left: `calc(${(lcpDataReady / maxMs) * 100}% + 12px)` }}
+              />
+            )}
+            {lcpRendered > 0 && (
+              <div
+                className="absolute top-3 bottom-3 w-px bg-green-400/40"
+                style={{ left: `calc(${(lcpRendered / maxMs) * 100}% + 12px)` }}
+              />
+            )}
             {hydrationMs > 0 && (
               <div
                 className="absolute top-3 bottom-3 w-px border-l border-dashed border-amber-400/60"
                 style={{
                   left: `calc(${(hydrationMs / maxMs) * 100}% + 12px)`,
                 }}
+              />
+            )}
+            {csrInitComplete > 0 && (
+              <div
+                className="absolute top-3 bottom-3 w-px bg-purple-400/40"
+                style={{ left: `calc(${(csrInitComplete / maxMs) * 100}% + 12px)` }}
               />
             )}
 
@@ -839,13 +885,31 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
             </div>
           )}
 
-          {/* Hydration marker */}
+          {/* Vertical marker lines */}
+          {lcpDataReady > 0 && (
+            <div
+              className="absolute top-3 bottom-3 w-px bg-blue-400/50"
+              style={{ left: `calc(${(lcpDataReady / maxMs) * 100}% + 12px)` }}
+            />
+          )}
+          {lcpRendered > 0 && (
+            <div
+              className="absolute top-3 bottom-3 w-px bg-green-400/40"
+              style={{ left: `calc(${(lcpRendered / maxMs) * 100}% + 12px)` }}
+            />
+          )}
           {hydrationMs > 0 && (
             <div
               className="absolute top-3 bottom-3 w-px border-l border-dashed border-amber-400/60"
               style={{
                 left: `calc(${(hydrationMs / maxMs) * 100}% + 12px)`,
               }}
+            />
+          )}
+          {csrInitComplete > 0 && (
+            <div
+              className="absolute top-3 bottom-3 w-px bg-purple-400/40"
+              style={{ left: `calc(${(csrInitComplete / maxMs) * 100}% + 12px)` }}
             />
           )}
         </div>
