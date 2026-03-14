@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { BoundaryTreeTable } from "@/components/dashboard/BoundaryTreeTable";
 import { CriticalInitPath } from "@/components/dashboard/CriticalInitPath";
 import { SubgraphCallsTab } from "@/components/dashboard/SubgraphCallsTab";
@@ -21,9 +21,6 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [pctl, setPctl] = useState<number>(99);
   const [pageType, setPageType] = useState("pdp");
-  const [slowMode, setSlowMode] = useState(false);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [iframeKey, setIframeKey] = useState(0);
 
   const currentPage = PAGE_TYPES.find((p) => p.value === pageType) ?? PAGE_TYPES[0];
 
@@ -72,32 +69,6 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-3 flex-shrink-0">
-            {/* Slow Mode toggle */}
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <span className="text-xs text-zinc-500">Slow Mode</span>
-              <button
-                role="switch"
-                aria-checked={slowMode}
-                onClick={() => setSlowMode((v) => !v)}
-                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-                  slowMode ? "bg-amber-600" : "bg-zinc-700"
-                }`}
-              >
-                <span
-                  className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${
-                    slowMode ? "translate-x-4.5" : "translate-x-0.5"
-                  }`}
-                />
-              </button>
-            </label>
-            <button
-              onClick={refreshMetrics}
-              className="px-3 py-1.5 text-sm border border-zinc-700 rounded text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 transition-colors"
-            >
-              Refresh
-            </button>
-          </div>
           <div className="flex items-center gap-2">
             <button
               onClick={clearMetrics}
@@ -113,30 +84,6 @@ export default function DashboardPage() {
             </button>
           </div>
         </div>
-
-        {/* Slow Mode viewer */}
-        {slowMode && (
-          <div className="rounded-lg border border-amber-700/50 bg-zinc-900 overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2 bg-amber-900/20 border-b border-amber-700/30">
-              <span className="text-xs text-amber-400">
-                Slow Mode &mdash; Watch boundaries resolve in real-time (no stats recorded)
-              </span>
-              <button
-                onClick={() => setIframeKey((k) => k + 1)}
-                className="px-3 py-1 text-xs bg-amber-700/30 text-amber-300 rounded hover:bg-amber-700/50 transition-colors"
-              >
-                Reload
-              </button>
-            </div>
-            <iframe
-              ref={iframeRef}
-              key={iframeKey}
-              src="/products/demo-sku?slow=1"
-              className="w-full h-[600px] bg-zinc-950 border-0"
-              title="Slow mode PDP preview"
-            />
-          </div>
-        )}
 
         {/* Tab navigation + percentile selector */}
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800">
