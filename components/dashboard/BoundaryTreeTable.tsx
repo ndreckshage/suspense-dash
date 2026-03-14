@@ -71,15 +71,18 @@ const TREE_STRUCTURE: TreeItem[] = [
   { path: "shell.content.main.thumbnails.query", name: "getThumbnails", type: "query", boundaryPath: "shell.content.main.thumbnails", queryName: "getThumbnails" },
   { path: "shell.content.main.thumbnails.query.op1", name: "media.thumbnails", type: "subgraph-op", boundaryPath: "shell.content.main.thumbnails", queryName: "getThumbnails", opName: "media.thumbnails", subgraphName: "media-subgraph" },
 
-  // pdp (LCP critical — getProductInfo + getProductPricing in parallel)
-  { path: "shell.content.main.pdp", name: "pdp", type: "boundary", boundaryPath: "shell.content.main.pdp", expectedFetchMs: 55 },
-  { path: "shell.content.main.pdp.query1", name: "getProductInfo", type: "query", boundaryPath: "shell.content.main.pdp", queryName: "getProductInfo" },
-  { path: "shell.content.main.pdp.query1.op1", name: "product.core", type: "subgraph-op", boundaryPath: "shell.content.main.pdp", queryName: "getProductInfo", opName: "product.core", subgraphName: "product-subgraph" },
-  { path: "shell.content.main.pdp.query1.op2", name: "product.bullets", type: "subgraph-op", boundaryPath: "shell.content.main.pdp", queryName: "getProductInfo", opName: "product.bullets", subgraphName: "product-subgraph" },
-  { path: "shell.content.main.pdp.query2", name: "getProductPricing", type: "query", boundaryPath: "shell.content.main.pdp", queryName: "getProductPricing" },
-  { path: "shell.content.main.pdp.query2.op1", name: "pricing.current", type: "subgraph-op", boundaryPath: "shell.content.main.pdp", queryName: "getProductPricing", opName: "pricing.current", subgraphName: "pricing-subgraph" },
-  { path: "shell.content.main.pdp.query2.op2", name: "inventory.availability", type: "subgraph-op", boundaryPath: "shell.content.main.pdp", queryName: "getProductPricing", opName: "inventory.availability", subgraphName: "inventory-subgraph" },
-  { path: "shell.content.main.pdp.query2.op3", name: "reviews.summary", type: "subgraph-op", boundaryPath: "shell.content.main.pdp", queryName: "getProductPricing", opName: "reviews.summary", subgraphName: "reviews-subgraph" },
+  // pdp (getProductInfo only — product.core + product.bullets)
+  { path: "shell.content.main.pdp", name: "pdp", type: "boundary", boundaryPath: "shell.content.main.pdp", expectedFetchMs: 45 },
+  { path: "shell.content.main.pdp.query", name: "getProductInfo", type: "query", boundaryPath: "shell.content.main.pdp", queryName: "getProductInfo" },
+  { path: "shell.content.main.pdp.query.op1", name: "product.core", type: "subgraph-op", boundaryPath: "shell.content.main.pdp", queryName: "getProductInfo", opName: "product.core", subgraphName: "product-subgraph" },
+  { path: "shell.content.main.pdp.query.op2", name: "product.bullets", type: "subgraph-op", boundaryPath: "shell.content.main.pdp", queryName: "getProductInfo", opName: "product.bullets", subgraphName: "product-subgraph" },
+
+  // pricing (getProductPricing — intentionally slow, own Suspense boundary)
+  { path: "shell.content.main.pricing", name: "pricing", type: "boundary", boundaryPath: "shell.content.main.pricing", expectedFetchMs: 450 },
+  { path: "shell.content.main.pricing.query", name: "getProductPricing", type: "query", boundaryPath: "shell.content.main.pricing", queryName: "getProductPricing" },
+  { path: "shell.content.main.pricing.query.op1", name: "pricing.current", type: "subgraph-op", boundaryPath: "shell.content.main.pricing", queryName: "getProductPricing", opName: "pricing.current", subgraphName: "pricing-subgraph" },
+  { path: "shell.content.main.pricing.query.op2", name: "inventory.availability", type: "subgraph-op", boundaryPath: "shell.content.main.pricing", queryName: "getProductPricing", opName: "inventory.availability", subgraphName: "inventory-subgraph" },
+  { path: "shell.content.main.pricing.query.op3", name: "reviews.summary", type: "subgraph-op", boundaryPath: "shell.content.main.pricing", queryName: "getProductPricing", opName: "reviews.summary", subgraphName: "reviews-subgraph" },
 
   // bullets (getProductInfo cache hit)
   { path: "shell.content.main.bullets", name: "bullets", type: "boundary", boundaryPath: "shell.content.main.bullets", expectedFetchMs: 0 },
@@ -115,7 +118,8 @@ const BOUNDARY_SLOS: Record<string, number> = {
   "shell.content.breadcrumbs": 120,
   "shell.content.main.hero": 60,
   "shell.content.main.thumbnails": 120,
-  "shell.content.main.pdp": 200,
+  "shell.content.main.pdp": 100,
+  "shell.content.main.pricing": 600,
   "shell.content.main.bullets": 80,
   "shell.content.main.options": 80,
   "shell.content.carousels": 400,

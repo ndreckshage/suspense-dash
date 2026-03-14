@@ -33,7 +33,7 @@ export const SUBGRAPH_OPERATIONS: Record<string, SubgraphOperationDef> = {
   "product.core": { subgraph: "product-subgraph", baseMs: 45, sloMs: 60 },
   "product.bullets": { subgraph: "product-subgraph", baseMs: 30, sloMs: 50 },
   "product.cards": { subgraph: "product-subgraph", baseMs: 60, sloMs: 80 },
-  "pricing.current": { subgraph: "pricing-subgraph", baseMs: 55, sloMs: 80 },
+  "pricing.current": { subgraph: "pricing-subgraph", baseMs: 350, sloMs: 400 },
   "pricing.batch": { subgraph: "pricing-subgraph", baseMs: 120, sloMs: 160 },
   "inventory.availability": {
     subgraph: "inventory-subgraph",
@@ -95,7 +95,7 @@ export const GQL_QUERIES: Record<string, GqlQueryDef> = {
   },
   getProductPricing: {
     operations: ["pricing.current", "inventory.availability", "reviews.summary"],
-    sloMs: 120,
+    sloMs: 600,
   },
   getRecommendations: {
     operations: ["reco.personalized", "product.cards", "pricing.batch"],

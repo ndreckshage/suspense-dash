@@ -139,11 +139,11 @@ class MetricsStore {
 // module evaluations in the same Node.js process (important in dev mode where
 // Next.js/Turbopack may re-evaluate modules).
 // Version key ensures stale instances (missing new methods) are replaced on hot reload.
-const globalKey = "__suspense_metrics_store_v6__" as const;
+const globalKey = "__suspense_metrics_store_v7__" as const;
 
 declare global {
   // eslint-disable-next-line no-var
-  var __suspense_metrics_store_v6__: MetricsStore | undefined;
+  var __suspense_metrics_store_v7__: MetricsStore | undefined;
 }
 
 export const metricsStore: MetricsStore =

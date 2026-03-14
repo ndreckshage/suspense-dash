@@ -211,7 +211,7 @@ export default async function PDPPage({
 
             {/* Right: product info */}
             <div className="md:w-1/2 md:py-6 md:pl-6">
-              {/* PDP — getProductInfo (product.core + bullets) + getProductPricing */}
+              {/* PDP — getProductInfo (product.core + product.bullets) */}
               <TracedBoundary
                 name="pdp"
                 boundaryPath="shell.content.main.pdp"
@@ -219,35 +219,44 @@ export default async function PDPPage({
                 fallback={
                   <div className="px-6 md:px-0 pb-4 space-y-3">
                     {/* Title */}
-                    <div className="h-9 bg-zinc-800 rounded w-3/4 animate-pulse" />
+                    <div className="h-9 bg-zinc-800 rounded w-3/4 animate-pulse mb-7" />
                     {/* Description */}
-                    <div className="h-4 bg-zinc-800 rounded w-full animate-pulse" />
-                    <div className="h-4 bg-zinc-800 rounded w-2/3 animate-pulse" />
+                    <div className="h-4 bg-zinc-800 rounded w-full animate-pulse mb-4" />
                     {/* Rating */}
-                    <div className="h-4 bg-zinc-800 rounded w-48 animate-pulse" />
-                    {/* Price */}
-                    <div className="h-10 bg-zinc-800 rounded w-40 animate-pulse mt-2" />
-                    {/* Original price + discount */}
-                    <div className="h-4 bg-zinc-800 rounded w-32 animate-pulse" />
+                    <div className="h-3 bg-zinc-800 rounded w-48 animate-pulse" />
                   </div>
                 }
                 render={async (ref) => {
-                  const [info, pricing] = await Promise.all([
-                    executeGqlQuery(
-                      "getProductInfo",
-                      "shell.content.main.pdp",
-                      () => mockProductInfo(sku),
-                    ),
-                    executeGqlQuery(
-                      "getProductPricing",
-                      "shell.content.main.pdp",
-                      mockProductPricing,
-                    ),
-                  ]);
+                  const info = await executeGqlQuery(
+                    "getProductInfo",
+                    "shell.content.main.pdp",
+                    () => mockProductInfo(sku),
+                  );
+                  ref.ts = Date.now();
+                  return <ProductSummary product={info} />;
+                }}
+              />
+
+              {/* Pricing — getProductPricing (intentionally slow ~500ms) */}
+              <TracedBoundary
+                name="pricing"
+                boundaryPath="shell.content.main.pricing"
+                renderCostMs={3}
+                fallback={
+                  <div className="px-6 md:px-0 py-3 space-y-2">
+                    <div className="h-8 bg-zinc-800 rounded w-40 animate-pulse mb-4" />
+                    <div className="h-3 bg-zinc-800 rounded w-36 animate-pulse" />
+                  </div>
+                }
+                render={async (ref) => {
+                  const pricing = await executeGqlQuery(
+                    "getProductPricing",
+                    "shell.content.main.pricing",
+                    mockProductPricing,
+                  );
                   ref.ts = Date.now();
                   return (
                     <>
-                      <ProductSummary product={info} />
                       <Pricing
                         data={{
                           price: pricing.price,
