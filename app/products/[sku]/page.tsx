@@ -1,4 +1,5 @@
 import { TracedBoundary } from "@/components/TracedBoundary";
+import { MetricsEmbed } from "@/components/MetricsEmbed";
 import { executeGqlQuery } from "@/lib/gql-query";
 import { getRequestContext } from "@/lib/boundary-context";
 import { metricsStore } from "@/lib/metrics-store";
@@ -398,6 +399,9 @@ export default async function PDPPage({
           return <Footer data={data} />;
         }}
       />
+
+      {/* Embed metrics in HTML for client-side load testing (only when x-load-test header present) */}
+      <MetricsEmbed requestId={ctx.requestId} />
     </>
   );
 }
