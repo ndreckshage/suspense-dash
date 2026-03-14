@@ -1,39 +1,45 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { clientMetricsStore } from "@/lib/client-metrics-store";
+import type {
+  BoundaryMetric,
+  FetchMetric,
+  QueryMetric,
+  SubgraphOperationMetric,
+} from "@/lib/metrics-store";
+
+interface Props {
+  metrics: {
+    boundaries: BoundaryMetric[];
+    fetches: FetchMetric[];
+    queries: QueryMetric[];
+    subgraphOps: SubgraphOperationMetric[];
+  };
+}
 
 /**
- * Client component that reads embedded metrics from the server-rendered HTML
- * and persists them to localStorage on hydration.
+ * Client component that persists server-rendered metrics to localStorage.
  *
- * The server's MetricsEmbed component writes a <script type="application/json">
- * tag with the request's metrics. This component finds that tag in the DOM,
- * parses it, and stores the data — so every normal page visit automatically
- * contributes to the dashboard's dataset.
+ * Rendered inside MetricsEmbed's Suspense boundary, so it only mounts
+ * after all boundaries have been recorded and the data has streamed in.
+ * Receives metrics directly as a prop — no DOM querying needed.
  */
-export function MetricsCollector() {
+export function MetricsCollector({ metrics }: Props) {
+  const stored = useRef(false);
+
   useEffect(() => {
-    try {
-      const el = document.getElementById("__perf_metrics__");
-      if (!el) return;
+    if (stored.current) return;
+    if (!metrics?.boundaries?.length) return;
 
-      const metrics = JSON.parse(el.textContent || "");
-      if (!metrics?.boundaries?.length) return;
+    // Deduplicate: don't re-store if this request is already recorded
+    const requestId = metrics.boundaries[0].requestId;
+    const existing = clientMetricsStore.getMetrics();
+    if (existing.boundaries.some((b) => b.requestId === requestId)) return;
 
-      // Deduplicate: don't re-store if this request is already recorded
-      const requestId = metrics.boundaries[0].requestId;
-      const existing = clientMetricsStore.getMetrics();
-      const alreadyStored = existing.boundaries.some(
-        (b) => b.requestId === requestId,
-      );
-      if (alreadyStored) return;
-
-      clientMetricsStore.addPageLoad(metrics);
-    } catch {
-      // Silently ignore — metrics collection is best-effort
-    }
-  }, []);
+    clientMetricsStore.addPageLoad(metrics);
+    stored.current = true;
+  }, [metrics]);
 
   return null;
 }
