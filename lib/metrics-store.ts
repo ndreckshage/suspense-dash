@@ -5,6 +5,12 @@ export interface BoundaryMetric {
   boundary_path: string;
   wall_start_ms: number;
   render_duration_ms: number;
+  /** Async I/O time — the await render() portion (non-blocking, overlaps with other boundaries) */
+  fetch_duration_ms?: number;
+  /** Sync CPU time — busy-wait simulating JSX→HTML serialization (blocks the thread) */
+  render_cost_ms?: number;
+  /** Time this boundary waited for the thread after its fetch resolved (>0 means another boundary's render was blocking) */
+  blocked_ms?: number;
   is_lcp_critical: boolean;
 }
 

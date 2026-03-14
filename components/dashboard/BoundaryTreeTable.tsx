@@ -36,12 +36,13 @@ interface TreeNode {
   path: string;
   depth: number;
   isLast: boolean;
-  ancestors: boolean[]; // which ancestors are "last" (for tree line rendering)
+  ancestors: boolean[];
   type: "boundary" | "fetch";
   wallStartP50: number;
   p50: number;
-  p95: number;
-  p99: number;
+  fetchDurationP50: number;
+  renderCostP50: number;
+  blockedP50: number;
   slo: number;
   lcpCritical: boolean;
 }
@@ -53,40 +54,42 @@ function percentile(values: number[], p: number): number {
   return Math.round(sorted[Math.max(0, idx)]);
 }
 
-// Define the tree structure explicitly to match the PDP hierarchy
+// Define the tree structure explicitly to match the PDP hierarchy.
+// expectedFetchMs mirrors the simulatedFetch base latencies from the page.
+// We need these because measured fetch_duration_ms is inflated by thread
+// blocking (the continuation can't run until the thread is free), making
+// it impossible to detect blocking from measured data alone.
 const TREE_STRUCTURE: {
   path: string;
   name: string;
   type: "boundary" | "fetch";
   fetchName?: string;
   lcpCritical?: boolean;
+  expectedFetchMs?: number;
 }[] = [
-  { path: "shell", name: "shell", type: "boundary", lcpCritical: true },
+  { path: "shell", name: "shell", type: "boundary", lcpCritical: true, expectedFetchMs: 50 },
   { path: "shell", name: "session-config", type: "fetch", fetchName: "session-config" },
-  { path: "shell.nav", name: "nav", type: "boundary" },
+  { path: "shell.nav", name: "nav", type: "boundary", expectedFetchMs: 150 },
   { path: "shell.nav", name: "nav-config", type: "fetch", fetchName: "nav-config" },
-  { path: "shell.pdp", name: "pdp", type: "boundary", lcpCritical: true },
+  { path: "shell.pdp", name: "pdp", type: "boundary", lcpCritical: true, expectedFetchMs: 200 },
   { path: "shell.pdp", name: "product-api", type: "fetch", fetchName: "product-api", lcpCritical: true },
-  { path: "shell.pdp.breadcrumbs", name: "breadcrumbs", type: "boundary" },
+  { path: "shell.pdp.breadcrumbs", name: "breadcrumbs", type: "boundary", expectedFetchMs: 80 },
   { path: "shell.pdp.breadcrumbs", name: "category-path", type: "fetch", fetchName: "category-path" },
-  { path: "shell.pdp.details", name: "details", type: "boundary" },
+  { path: "shell.pdp.details", name: "details", type: "boundary", expectedFetchMs: 120 },
   { path: "shell.pdp.details", name: "pricing-api", type: "fetch", fetchName: "pricing-api" },
-  { path: "shell.pdp.carousels", name: "carousels", type: "boundary" },
+  { path: "shell.pdp.carousels", name: "carousels", type: "boundary", expectedFetchMs: 350 },
   { path: "shell.pdp.carousels", name: "reco-engine", type: "fetch", fetchName: "reco-engine" },
-  { path: "shell.pdp.reviews", name: "reviews", type: "boundary" },
+  { path: "shell.pdp.reviews", name: "reviews", type: "boundary", expectedFetchMs: 500 },
   { path: "shell.pdp.reviews", name: "reviews-service", type: "fetch", fetchName: "reviews-service" },
-  { path: "shell.footer", name: "footer", type: "boundary" },
+  { path: "shell.footer", name: "footer", type: "boundary", expectedFetchMs: 60 },
   { path: "shell.footer", name: "footer-config", type: "fetch", fetchName: "footer-config" },
 ];
 
 function getDepth(path: string, type: "boundary" | "fetch"): number {
   const parts = path.split(".");
-  // For boundaries, depth = how deep in the tree
-  // shell = 0, shell.nav = 1, shell.pdp.details = 2
   if (type === "boundary") {
     return parts.length - 1;
   }
-  // For fetches, they're children of their boundary
   return parts.length;
 }
 
@@ -94,7 +97,6 @@ export function BoundaryTreeTable({ boundaries, fetches }: Props) {
   const treeNodes = useMemo(() => {
     if (boundaries.length === 0 && fetches.length === 0) return [];
 
-    // Group boundary metrics by path
     const boundaryByPath = new Map<string, BoundaryMetric[]>();
     for (const b of boundaries) {
       const list = boundaryByPath.get(b.boundary_path) ?? [];
@@ -102,7 +104,6 @@ export function BoundaryTreeTable({ boundaries, fetches }: Props) {
       boundaryByPath.set(b.boundary_path, list);
     }
 
-    // Group fetch metrics by name+boundary
     const fetchByKey = new Map<string, FetchMetric[]>();
     for (const f of fetches) {
       const key = `${f.boundary_path}:${f.fetch_name}`;
@@ -113,18 +114,8 @@ export function BoundaryTreeTable({ boundaries, fetches }: Props) {
 
     const nodes: TreeNode[] = [];
 
-    // Determine which nodes are "last" at each level for tree rendering
-    // Group by parent path to find last children
     const childrenByParent = new Map<string, typeof TREE_STRUCTURE>();
     for (const item of TREE_STRUCTURE) {
-      const parentPath =
-        item.type === "fetch"
-          ? item.path
-          : item.path.includes(".")
-            ? item.path.split(".").slice(0, -1).join(".")
-            : "";
-      const key = `${parentPath}:${item.type === "fetch" ? "fetch" : "boundary"}`;
-      // Actually group all children under same visual parent
       const visualParent = item.type === "fetch"
         ? item.path
         : item.path.includes(".")
@@ -139,7 +130,6 @@ export function BoundaryTreeTable({ boundaries, fetches }: Props) {
       const item = TREE_STRUCTURE[i];
       const depth = getDepth(item.path, item.type);
 
-      // Determine if this is the last sibling at its depth
       const visualParent = item.type === "fetch"
         ? item.path
         : item.path.includes(".")
@@ -152,8 +142,24 @@ export function BoundaryTreeTable({ boundaries, fetches }: Props) {
         const metrics = boundaryByPath.get(item.path) ?? [];
         const durations = metrics.map((m) => m.render_duration_ms);
         const wallStarts = metrics.map((m) => m.wall_start_ms);
+        const renderCosts = metrics.map((m) => m.render_cost_ms ?? 0);
         const lcpCritical =
           item.lcpCritical ?? metrics.some((m) => m.is_lcp_critical);
+
+        // Use the associated fetch metric for true I/O duration (less inflated
+        // than boundary's fetch_duration_ms which includes thread-wait time)
+        const assocFetchItem = TREE_STRUCTURE.find(
+          (s) => s.type === "fetch" && s.path === item.path
+        );
+        const assocFetchKey = assocFetchItem
+          ? `${assocFetchItem.path}:${assocFetchItem.fetchName}`
+          : null;
+        const assocFetchMetrics = assocFetchKey
+          ? fetchByKey.get(assocFetchKey) ?? []
+          : [];
+        const fetchDurP50 = assocFetchMetrics.length > 0
+          ? percentile(assocFetchMetrics.map((m) => m.duration_ms), 50)
+          : percentile(metrics.map((m) => m.fetch_duration_ms ?? m.render_duration_ms), 50);
 
         nodes.push({
           name: item.name,
@@ -164,8 +170,9 @@ export function BoundaryTreeTable({ boundaries, fetches }: Props) {
           type: "boundary",
           wallStartP50: percentile(wallStarts, 50),
           p50: percentile(durations, 50),
-          p95: percentile(durations, 95),
-          p99: percentile(durations, 99),
+          fetchDurationP50: fetchDurP50,
+          renderCostP50: percentile(renderCosts, 50),
+          blockedP50: 0, // computed below via thread simulation
           slo: DEFAULT_SLOS[item.path] ?? 500,
           lcpCritical,
         });
@@ -183,12 +190,48 @@ export function BoundaryTreeTable({ boundaries, fetches }: Props) {
           type: "fetch",
           wallStartP50: 0,
           p50: percentile(durations, 50),
-          p95: percentile(durations, 95),
-          p99: percentile(durations, 99),
+          fetchDurationP50: percentile(durations, 50),
+          renderCostP50: 0,
+          blockedP50: 0,
           slo: DEFAULT_FETCH_SLOS[item.fetchName!] ?? 500,
           lcpCritical: item.lcpCritical ?? false,
         });
       }
+    }
+
+    // Compute blocked_ms via thread simulation using expected (configured)
+    // fetch latencies. Measured fetch_duration_ms can't be used because it's
+    // inflated by thread blocking (the JS continuation only runs when the
+    // thread is free, so Date.now() already includes wait time).
+    // In production, you'd get true I/O times from kernel/network-layer
+    // instrumentation (e.g., eBPF, APM agents).
+    const expectedFetchByPath = new Map<string, number>();
+    for (const item of TREE_STRUCTURE) {
+      if (item.expectedFetchMs !== undefined) {
+        expectedFetchByPath.set(item.path, item.expectedFetchMs);
+      }
+    }
+
+    const boundaryNodes = nodes.filter(
+      (n) => n.type === "boundary" && n.renderCostP50 > 0
+    );
+    // Sort by expected fetch completion time (wallStart + expectedFetch)
+    const sorted = [...boundaryNodes].sort((a, b) => {
+      const aEnd = a.wallStartP50 + (expectedFetchByPath.get(a.path) ?? a.fetchDurationP50);
+      const bEnd = b.wallStartP50 + (expectedFetchByPath.get(b.path) ?? b.fetchDurationP50);
+      return aEnd - bEnd;
+    });
+    let threadCursor = 0;
+    for (const bn of sorted) {
+      const expectedFetch = expectedFetchByPath.get(bn.path) ?? bn.fetchDurationP50;
+      const fetchEnd = bn.wallStartP50 + expectedFetch;
+      const renderStart = Math.max(threadCursor, fetchEnd);
+      const blocked = renderStart - fetchEnd;
+      const nodeIdx = nodes.findIndex((n) => n.path === bn.path);
+      if (nodeIdx >= 0) {
+        nodes[nodeIdx].blockedP50 = Math.max(0, Math.round(blocked));
+      }
+      threadCursor = renderStart + bn.renderCostP50;
     }
 
     return nodes;
@@ -207,7 +250,7 @@ export function BoundaryTreeTable({ boundaries, fetches }: Props) {
       <table className="w-full text-sm font-mono table-fixed">
         <thead>
           <tr className="text-zinc-500 text-xs border-b border-zinc-800">
-            <th className="text-left py-2 px-2 font-normal" style={{ width: "35%" }}>
+            <th className="text-left py-2 px-2 font-normal" style={{ width: "25%" }}>
               Boundary / Fetch
             </th>
             <th className="text-right py-2 px-2 font-normal" style={{ width: "10%" }}>
@@ -216,25 +259,32 @@ export function BoundaryTreeTable({ boundaries, fetches }: Props) {
               <span className="text-zinc-600">p50</span>
             </th>
             <th className="text-right py-2 px-2 font-normal" style={{ width: "10%" }}>
-              Duration
+              Fetch
               <br />
               <span className="text-zinc-600">p50</span>
             </th>
             <th className="text-right py-2 px-2 font-normal" style={{ width: "10%" }}>
+              Render
               <br />
-              <span className="text-zinc-600">p95</span>
+              <span className="text-zinc-600">p50</span>
             </th>
             <th className="text-right py-2 px-2 font-normal" style={{ width: "10%" }}>
+              Blocked
               <br />
-              <span className="text-zinc-600">p99</span>
+              <span className="text-zinc-600">p50</span>
             </th>
-            <th className="text-right py-2 px-2 font-normal" style={{ width: "10%" }}>SLO</th>
-            <th className="text-center py-2 px-2 font-normal" style={{ width: "8%" }}>Status</th>
+            <th className="text-right py-2 px-2 font-normal" style={{ width: "10%" }}>
+              Total
+              <br />
+              <span className="text-zinc-600">p50</span>
+            </th>
+            <th className="text-right py-2 px-2 font-normal" style={{ width: "8%" }}>SLO</th>
+            <th className="text-center py-2 px-2 font-normal" style={{ width: "7%" }}>Status</th>
           </tr>
         </thead>
         <tbody>
           {treeNodes.map((node) => {
-            const sloRatio = node.p99 / node.slo;
+            const sloRatio = node.p50 / node.slo;
             const statusColor =
               sloRatio > 1
                 ? "text-red-400"
@@ -243,6 +293,13 @@ export function BoundaryTreeTable({ boundaries, fetches }: Props) {
                   : "text-green-400";
             const statusIcon =
               sloRatio > 1 ? "!!!" : sloRatio > 0.8 ? "!!" : "OK";
+
+            const blockedHighlight =
+              node.blockedP50 > 0 && node.lcpCritical
+                ? "text-amber-400 font-medium"
+                : node.blockedP50 > 0
+                  ? "text-yellow-500/70"
+                  : "text-zinc-600";
 
             return (
               <tr
@@ -282,13 +339,20 @@ export function BoundaryTreeTable({ boundaries, fetches }: Props) {
                   {node.type === "boundary" ? `${node.wallStartP50}ms` : ""}
                 </td>
                 <td className="text-right py-1.5 px-2 text-zinc-300">
+                  {node.fetchDurationP50}ms
+                </td>
+                <td className="text-right py-1.5 px-2 text-zinc-300">
+                  {node.type === "boundary" ? `${node.renderCostP50}ms` : ""}
+                </td>
+                <td className={`text-right py-1.5 px-2 ${blockedHighlight}`}>
+                  {node.type === "boundary"
+                    ? node.blockedP50 > 0
+                      ? `${node.blockedP50}ms`
+                      : "—"
+                    : ""}
+                </td>
+                <td className="text-right py-1.5 px-2 text-zinc-300">
                   {node.p50}ms
-                </td>
-                <td className="text-right py-1.5 px-2 text-zinc-300">
-                  {node.p95}ms
-                </td>
-                <td className="text-right py-1.5 px-2 text-zinc-300">
-                  {node.p99}ms
                 </td>
                 <td className="text-right py-1.5 px-2 text-zinc-500">
                   {node.slo}ms
@@ -316,9 +380,7 @@ function TreeConnector() {
       stroke="currentColor"
       strokeWidth="1.5"
     >
-      {/* Vertical line from top */}
       <line x1="4" y1="0" x2="4" y2="8" />
-      {/* Horizontal line to right */}
       <line x1="4" y1="8" x2="14" y2="8" />
     </svg>
   );
