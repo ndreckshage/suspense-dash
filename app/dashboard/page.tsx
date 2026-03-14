@@ -96,6 +96,17 @@ export default function DashboardPage() {
             <div className="text-center py-12 text-zinc-500 animate-pulse">
               Loading metrics...
             </div>
+          ) : metrics && metrics.totalPageLoads === 0 ? (
+            <div className="text-center py-12 text-zinc-500">
+              <p>No metrics data yet.</p>
+              <p className="text-sm mt-2">
+                Click <span className="text-blue-400">Generate Load</span> above to fire requests
+                to the product page and collect performance metrics.
+              </p>
+              <p className="text-xs mt-1 text-zinc-600">
+                Metrics are stored in your browser (localStorage) and persist between reloads.
+              </p>
+            </div>
           ) : activeTab === "tree" ? (
             <BoundaryTreeTable
               boundaries={metrics?.boundaries ?? []}

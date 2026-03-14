@@ -13,10 +13,14 @@ interface LoadGeneratorProps {
  * Extracts embedded metrics from a product page HTML response.
  * The server embeds metrics in a <script type="application/json" id="__perf_metrics__"> tag
  * when the x-load-test header is present.
+ *
+ * Uses a loose regex that matches the id attribute regardless of attribute order,
+ * since React may reorder attributes in different environments.
  */
 function extractMetrics(html: string) {
+  // Match script tag with id="__perf_metrics__" — allow attributes in any order
   const match = html.match(
-    /<script\s+type="application\/json"\s+id="__perf_metrics__">([\s\S]*?)<\/script>/,
+    /<script[^>]*\bid="__perf_metrics__"[^>]*>([\s\S]*?)<\/script>/,
   );
   if (!match) return null;
   try {
@@ -35,6 +39,7 @@ export function LoadGenerator({ onComplete }: LoadGeneratorProps) {
   const [result, setResult] = useState<{
     completed: number;
     requested: number;
+    errors: number;
   } | null>(null);
 
   const generate = useCallback(async () => {
@@ -48,17 +53,16 @@ export function LoadGenerator({ onComplete }: LoadGeneratorProps) {
       const actual = Math.min(count, remaining);
 
       if (actual === 0) {
-        setResult({ completed: 0, requested: count });
+        setResult({ completed: 0, requested: count, errors: 0 });
         setStatus("done");
         onComplete();
         return;
       }
 
       let completed = 0;
+      let errors = 0;
       for (let i = 0; i < actual; i++) {
         try {
-          // Fetch the actual product page — server renders with real Suspense
-          // boundaries, real async scheduling, and real thread contention
           const res = await fetch("/products/demo-sku", {
             cache: "no-store",
             headers: { "x-load-test": "true" },
@@ -66,18 +70,35 @@ export function LoadGenerator({ onComplete }: LoadGeneratorProps) {
           const html = await res.text();
           const metrics = extractMetrics(html);
 
-          if (metrics) {
+          if (metrics && metrics.boundaries?.length > 0) {
             clientMetricsStore.addPageLoad(metrics);
             completed++;
+          } else {
+            errors++;
+            if (errors === 1) {
+              // Log first extraction failure for debugging
+              const hasTag = html.includes("__perf_metrics__");
+              const isRSC = html.startsWith("0:") || html.startsWith("1:");
+              console.warn(
+                "[LoadGenerator] Metrics extraction failed.",
+                `Response length: ${html.length}`,
+                `Has metrics tag: ${hasTag}`,
+                `Is RSC payload: ${isRSC}`,
+                `First 200 chars: ${html.substring(0, 200)}`,
+              );
+            }
           }
-        } catch {
-          // Individual request failed — continue with next
+        } catch (err) {
+          errors++;
+          if (errors === 1) {
+            console.warn("[LoadGenerator] Request failed:", err);
+          }
         }
 
         setProgress(i + 1);
       }
 
-      setResult({ completed, requested: count });
+      setResult({ completed, requested: count, errors });
       setStatus("done");
       onComplete();
     } catch {
@@ -143,13 +164,18 @@ export function LoadGenerator({ onComplete }: LoadGeneratorProps) {
 
       {status === "running" && (
         <span className="text-sm text-yellow-400 animate-pulse">
-          Firing requests... {progress}/{Math.min(count, MAX_TOTAL_PAGE_LOADS - currentLoads + progress)}
+          Firing requests... {progress}/{actual()}
         </span>
       )}
       {status === "done" && result && (
         <span className="text-sm text-green-400">
           {result.completed}/{result.requested} completed
-          {result.completed < result.requested && (
+          {result.errors > 0 && (
+            <span className="text-yellow-400 ml-1">
+              ({result.errors} failed — check console)
+            </span>
+          )}
+          {result.completed < result.requested && result.errors === 0 && (
             <span className="text-zinc-500 ml-1">
               (capped at {MAX_TOTAL_PAGE_LOADS} total)
             </span>
@@ -166,4 +192,9 @@ export function LoadGenerator({ onComplete }: LoadGeneratorProps) {
       )}
     </div>
   );
+
+  function actual() {
+    const existing = clientMetricsStore.getPageLoadCount();
+    return Math.min(count, Math.max(0, MAX_TOTAL_PAGE_LOADS - existing));
+  }
 }
