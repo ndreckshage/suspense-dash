@@ -38,12 +38,24 @@ interface TreeItem {
  * Boundaries are ordered by median wall_start_ms, with queries and
  * subgraph-ops nested underneath their parent boundary.
  */
+/**
+ * Returns the parent boundary path for a given path.
+ * e.g. "Layout.Content.Main.Hero" → "Layout.Content.Main"
+ *      "Layout.Nav" → "Layout"
+ *      "Layout" → null
+ *      "csr.Cart" → "csr"
+ */
+function getParentPath(path: string): string | null {
+  const idx = path.lastIndexOf(".");
+  return idx === -1 ? null : path.substring(0, idx);
+}
+
 function buildTreeFromMetrics(
   boundaries: BoundaryMetric[],
   queries: QueryMetric[],
   subgraphOps: SubgraphOperationMetric[],
 ): TreeItem[] {
-  // 1. Collect unique boundary paths, ordered by median wall_start_ms
+  // 1. Collect unique boundary paths with median wall_start_ms
   const wallStartsByPath = new Map<string, number[]>();
   const lcpByPath = new Map<string, boolean>();
   for (const b of boundaries) {
@@ -53,13 +65,44 @@ function buildTreeFromMetrics(
     if (b.is_lcp_critical) lcpByPath.set(b.boundary_path, true);
   }
 
-  const boundaryPaths = [...wallStartsByPath.keys()].sort((a, b) => {
-    const aMedian = median(wallStartsByPath.get(a)!);
-    const bMedian = median(wallStartsByPath.get(b)!);
-    return aMedian - bMedian;
-  });
+  const allPaths = [...wallStartsByPath.keys()];
+  const medianByPath = new Map<string, number>();
+  for (const path of allPaths) {
+    medianByPath.set(path, median(wallStartsByPath.get(path)!));
+  }
 
-  // 2. Collect unique queries per boundary
+  // 2. Build parent→children map, respecting the dot-separated hierarchy.
+  //    A path's parent is the longest existing path that is a prefix of it.
+  //    e.g. if we have "Layout", "Layout.Content", "Layout.Content.Main.Hero",
+  //    then Hero's parent is Layout.Content (not Layout.Content.Main, which doesn't exist).
+  const childrenOf = new Map<string | null, string[]>();
+
+  // Sort paths by length so parents are processed before children
+  const sortedPaths = [...allPaths].sort((a, b) => a.length - b.length);
+
+  for (const path of sortedPaths) {
+    // Walk up the path segments to find the nearest existing ancestor
+    let parent: string | null = null;
+    let candidate = getParentPath(path);
+    while (candidate !== null) {
+      if (wallStartsByPath.has(candidate)) {
+        parent = candidate;
+        break;
+      }
+      candidate = getParentPath(candidate);
+    }
+
+    const siblings = childrenOf.get(parent) ?? [];
+    siblings.push(path);
+    childrenOf.set(parent, siblings);
+  }
+
+  // Sort each group of siblings by median wall_start_ms
+  for (const [, children] of childrenOf) {
+    children.sort((a, b) => (medianByPath.get(a) ?? 0) - (medianByPath.get(b) ?? 0));
+  }
+
+  // 3. Collect unique queries per boundary
   const queriesByBoundary = new Map<string, Set<string>>();
   for (const q of queries) {
     const set = queriesByBoundary.get(q.boundary_path) ?? new Set();
@@ -67,7 +110,7 @@ function buildTreeFromMetrics(
     queriesByBoundary.set(q.boundary_path, set);
   }
 
-  // 3. Collect unique subgraph ops per (boundary, query)
+  // 4. Collect unique subgraph ops per (boundary, query)
   const opsByBoundaryQuery = new Map<string, Map<string, string>>();
   for (const op of subgraphOps) {
     const key = `${op.boundary_path}:${op.queryName}`;
@@ -76,55 +119,63 @@ function buildTreeFromMetrics(
     opsByBoundaryQuery.set(key, opsMap);
   }
 
-  // 4. Build the tree
+  // 5. DFS walk the tree to produce correctly ordered items
   const items: TreeItem[] = [];
 
-  for (const boundaryPath of boundaryPaths) {
-    const name = boundaryPath.split(".").pop()!;
+  function walk(parentPath: string | null) {
+    const children = childrenOf.get(parentPath) ?? [];
+    for (const boundaryPath of children) {
+      const name = boundaryPath.split(".").pop()!;
 
-    items.push({
-      path: boundaryPath,
-      name,
-      type: "boundary",
-      boundaryPath,
-      lcpCritical: lcpByPath.get(boundaryPath) ?? false,
-    });
-
-    const queryNames = queriesByBoundary.get(boundaryPath);
-    if (!queryNames) continue;
-
-    let queryIdx = 0;
-    for (const queryName of queryNames) {
-      const queryPath = `${boundaryPath}.query${queryIdx > 0 ? queryIdx : ""}`;
       items.push({
-        path: queryPath,
-        name: queryName,
-        type: "query",
+        path: boundaryPath,
+        name,
+        type: "boundary",
         boundaryPath,
-        queryName,
+        lcpCritical: lcpByPath.get(boundaryPath) ?? false,
       });
 
-      const opsKey = `${boundaryPath}:${queryName}`;
-      const ops = opsByBoundaryQuery.get(opsKey);
-      if (ops) {
-        let opIdx = 0;
-        for (const [opName, subgraphName] of ops) {
+      // Add queries and subgraph ops under this boundary
+      const queryNames = queriesByBoundary.get(boundaryPath);
+      if (queryNames) {
+        let queryIdx = 0;
+        for (const queryName of queryNames) {
+          const queryPath = `${boundaryPath}.query${queryIdx > 0 ? queryIdx : ""}`;
           items.push({
-            path: `${queryPath}.op${opIdx > 0 ? opIdx : ""}`,
-            name: opName,
-            type: "subgraph-op",
+            path: queryPath,
+            name: queryName,
+            type: "query",
             boundaryPath,
             queryName,
-            opName,
-            subgraphName,
           });
-          opIdx++;
+
+          const opsKey = `${boundaryPath}:${queryName}`;
+          const ops = opsByBoundaryQuery.get(opsKey);
+          if (ops) {
+            let opIdx = 0;
+            for (const [opName, subgraphName] of ops) {
+              items.push({
+                path: `${queryPath}.op${opIdx > 0 ? opIdx : ""}`,
+                name: opName,
+                type: "subgraph-op",
+                boundaryPath,
+                queryName,
+                opName,
+                subgraphName,
+              });
+              opIdx++;
+            }
+          }
+          queryIdx++;
         }
       }
-      queryIdx++;
+
+      // Recurse into child boundaries
+      walk(boundaryPath);
     }
   }
 
+  walk(null);
   return items;
 }
 
@@ -167,8 +218,13 @@ interface TreeNode {
   hasChildren: boolean;
 }
 
-function getDepth(item: TreeItem): number {
-  return item.path.split(".").length - 1;
+function getDepth(item: TreeItem, depthMap: Map<string, number>): number {
+  if (item.type === "boundary") {
+    return depthMap.get(item.boundaryPath) ?? 0;
+  }
+  // Queries and ops indent one/two levels deeper than their boundary
+  const boundaryDepth = depthMap.get(item.boundaryPath) ?? 0;
+  return item.type === "query" ? boundaryDepth + 1 : boundaryDepth + 2;
 }
 
 export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl }: Props) {
@@ -266,18 +322,46 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl }: Pr
       opByKey.set(key, list);
     }
 
-    // Precompute which boundaries have children in the dynamic tree
+    // Compute depth for each boundary based on tree hierarchy
+    const depthMap = new Map<string, number>();
+    const allBoundaryPathsSet = new Set(
+      treeStructure.filter((t) => t.type === "boundary").map((t) => t.boundaryPath),
+    );
+    for (const path of allBoundaryPathsSet) {
+      let depth = 0;
+      let candidate = getParentPath(path);
+      while (candidate !== null) {
+        if (allBoundaryPathsSet.has(candidate)) {
+          depth++;
+        }
+        candidate = getParentPath(candidate);
+      }
+      depthMap.set(path, depth);
+    }
+
+    // Precompute which boundaries have children (queries, ops, or child boundaries)
     const boundaryHasChildren = new Set<string>();
     for (const item of treeStructure) {
       if (item.type !== "boundary") {
         boundaryHasChildren.add(item.boundaryPath);
       }
     }
+    // Also mark boundaries that have child boundaries
+    for (const path of allBoundaryPathsSet) {
+      let candidate = getParentPath(path);
+      while (candidate !== null) {
+        if (allBoundaryPathsSet.has(candidate)) {
+          boundaryHasChildren.add(candidate);
+          break;
+        }
+        candidate = getParentPath(candidate);
+      }
+    }
 
     const nodes: TreeNode[] = [];
 
     for (const item of treeStructure) {
-      const depth = getDepth(item);
+      const depth = getDepth(item, depthMap);
 
       if (item.type === "boundary") {
         const metrics = boundaryByPath.get(item.boundaryPath) ?? [];
@@ -382,14 +466,31 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl }: Pr
 
   // Filter visible nodes based on expanded state + subgraph filter
   const visibleNodes = useMemo(() => {
+    const allBPaths = new Set(treeNodes.filter((n) => n.type === "boundary").map((n) => n.boundaryPath));
+
+    // Check if all ancestor boundaries of a path are expanded
+    function ancestorsExpanded(path: string): boolean {
+      let candidate = getParentPath(path);
+      while (candidate !== null) {
+        if (allBPaths.has(candidate) && !expanded.has(candidate)) {
+          return false;
+        }
+        candidate = getParentPath(candidate);
+      }
+      return true;
+    }
+
     return treeNodes.filter((node) => {
       // Apply subgraph filter first
       if (filteredBoundaryPaths && !filteredBoundaryPaths.has(node.boundaryPath)) {
         return false;
       }
-      if (node.type === "boundary") return true;
-      // Non-boundary nodes are visible if their parent boundary is expanded
-      return expanded.has(node.boundaryPath);
+      if (node.type === "boundary") {
+        // Root boundaries always visible; child boundaries visible if ancestors expanded
+        return ancestorsExpanded(node.boundaryPath);
+      }
+      // Query/op nodes visible if their boundary AND all its ancestors are expanded
+      return expanded.has(node.boundaryPath) && ancestorsExpanded(node.boundaryPath);
     });
   }, [treeNodes, expanded, filteredBoundaryPaths]);
 
