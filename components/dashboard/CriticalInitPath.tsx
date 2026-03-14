@@ -415,23 +415,64 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
 
   return (
     <div className="space-y-6 overflow-x-auto" style={{ minWidth: 0 }}>
-      <div className="text-xs text-zinc-500 mb-2">
-        Shows how GQL queries overlap on the server, but sync rendering
-        serializes on the single Node.js thread.
-        {lcpBlocked > 0 && (
-          <span className="text-amber-400 ml-2">
-            LCP boundary was blocked {lcpBlocked}ms by other renders.
-          </span>
-        )}
-      </div>
-
-      {/* Time axis */}
-      <div className="flex justify-between text-xs text-zinc-600 font-mono">
-        <span>0ms</span>
-        <span>{Math.round(maxMs / 4)}ms</span>
-        <span>{Math.round(maxMs / 2)}ms</span>
-        <span>{Math.round((maxMs * 3) / 4)}ms</span>
-        <span>{maxMs}ms</span>
+      {/* Time axis + marker labels */}
+      <div>
+        <div className="flex justify-between text-xs text-zinc-600 font-mono">
+          <span>0ms</span>
+          <span>{Math.round(maxMs / 4)}ms</span>
+          <span>{Math.round(maxMs / 2)}ms</span>
+          <span>{Math.round((maxMs * 3) / 4)}ms</span>
+          <span>{maxMs}ms</span>
+        </div>
+        <div className="relative h-5 mt-1">
+          {lcpDataReady > 0 && (
+            <div
+              className="absolute top-0 flex items-center"
+              style={{ left: `${(lcpDataReady / maxMs) * 100}%` }}
+            >
+              <div className="w-px h-4 bg-blue-400" />
+              <span className="text-[10px] text-blue-400 ml-1 font-mono whitespace-nowrap">
+                LCP data @ {lcpDataReady}ms
+              </span>
+            </div>
+          )}
+          {lcpRendered > 0 && (
+            <div
+              className="absolute top-0 flex items-center"
+              style={{ left: `${(lcpRendered / maxMs) * 100}%` }}
+            >
+              <div className="w-px h-4 bg-green-400" />
+              <span className="text-[10px] text-green-400 ml-1 font-mono whitespace-nowrap">
+                LCP render @ {lcpRendered}ms
+                {lcpBlocked > 0 && (
+                  <span className="text-amber-400"> (+{lcpBlocked}ms blocked)</span>
+                )}
+              </span>
+            </div>
+          )}
+          {hydrationMs > 0 && (
+            <div
+              className="absolute top-0 flex items-center"
+              style={{ left: `${(hydrationMs / maxMs) * 100}%` }}
+            >
+              <div className="w-px h-4 bg-amber-400" />
+              <span className="text-[10px] text-amber-400 ml-1 font-mono whitespace-nowrap">
+                Hydration @ {Math.round(hydrationMs)}ms
+              </span>
+            </div>
+          )}
+          {csrInitComplete > 0 && (
+            <div
+              className="absolute top-0 flex items-center"
+              style={{ left: `${(csrInitComplete / maxMs) * 100}%` }}
+            >
+              <div className="w-px h-4 bg-purple-400" />
+              <span className="text-[10px] text-purple-400 ml-1 font-mono whitespace-nowrap">
+                Init complete @ {Math.round(csrInitComplete)}ms
+              </span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Query timeline (with subgraph op sub-bars) */}
@@ -593,40 +634,6 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
             })}
           </div>
 
-          {/* Markers */}
-          <div className="relative h-6">
-            {lcpDataReady > 0 && (
-              <div
-                className="absolute top-0 flex items-center"
-                style={{ left: `${(lcpDataReady / maxMs) * 100}%` }}
-              >
-                <div className="w-px h-4 bg-blue-400" />
-                <span className="text-xs text-blue-400 ml-1 font-mono whitespace-nowrap">
-                  LCP data ready @ {lcpDataReady}ms
-                </span>
-              </div>
-            )}
-          </div>
-          <div className="relative h-6">
-            {lcpRendered > 0 && (
-              <div
-                className="absolute top-0 flex items-center"
-                style={{ left: `${(lcpRendered / maxMs) * 100}%` }}
-              >
-                <div className="w-px h-4 bg-green-400" />
-                <span className="text-xs text-green-400 ml-1 font-mono whitespace-nowrap">
-                  LCP rendered @ {lcpRendered}ms
-                  {lcpBlocked > 0 && (
-                    <span className="text-amber-400">
-                      {" "}
-                      (+{lcpBlocked}ms blocked)
-                    </span>
-                  )}
-                </span>
-              </div>
-            )}
-          </div>
-
           {/* Vertical marker lines */}
           {lcpDataReady > 0 && (
             <div
@@ -754,35 +761,6 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
               />
             )}
 
-            {/* Markers */}
-            <div className="relative h-6 mt-1">
-              {hydrationMs > 0 && (
-                <div
-                  className="absolute top-0 flex items-center"
-                  style={{ left: `${(hydrationMs / maxMs) * 100}%` }}
-                >
-                  <div className="w-px h-4 bg-amber-400" />
-                  <span className="text-xs text-amber-400 ml-1 font-mono whitespace-nowrap">
-                    Hydration @ {Math.round(hydrationMs)}ms
-                  </span>
-                </div>
-              )}
-            </div>
-            <div className="relative h-6">
-              {csrInitComplete > 0 && (
-                <div
-                  className="absolute top-0 flex items-center"
-                  style={{
-                    left: `${(csrInitComplete / maxMs) * 100}%`,
-                  }}
-                >
-                  <div className="w-px h-4 bg-purple-400" />
-                  <span className="text-xs text-purple-400 ml-1 font-mono whitespace-nowrap">
-                    Init complete @ {Math.round(csrInitComplete)}ms
-                  </span>
-                </div>
-              )}
-            </div>
           </div>
         </div>
       )}
