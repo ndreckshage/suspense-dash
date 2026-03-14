@@ -1,14 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import { useCsrQuery } from "@/lib/csr-query-context";
+import { useCsrQuerySimulation } from "@/lib/csr-simulation";
+import { useCsrRequestContext } from "@/components/ClientQueryOrchestrator";
 
 /**
  * Client-side favorite/heart button overlaid on the hero image.
- * Waits for the actual getUserFavorites CSR query to resolve before showing status.
+ * Runs its own getUserFavorites query simulation in useEffect.
  */
 export function FavoriteButton() {
-  const queryStatus = useCsrQuery("getUserFavorites");
+  const ctx = useCsrRequestContext();
+  const queryStatus = useCsrQuerySimulation(
+    "getUserFavorites",
+    "csr.Favorites",
+    ctx?.requestId ?? "",
+    ctx?.requestStartTs ?? 0,
+  );
   const [toggled, setToggled] = useState(false);
 
   // Query resolves with "saved" state; user can toggle after

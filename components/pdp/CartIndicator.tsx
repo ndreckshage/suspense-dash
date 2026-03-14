@@ -1,13 +1,20 @@
 "use client";
 
-import { useCsrQuery } from "@/lib/csr-query-context";
+import { useCsrQuerySimulation } from "@/lib/csr-simulation";
+import { useCsrRequestContext } from "@/components/ClientQueryOrchestrator";
 
 /**
  * Client-side cart indicator that appears in the nav after hydration.
- * Waits for the actual getUserCart CSR query to resolve before showing count.
+ * Runs its own getUserCart query simulation in useEffect.
  */
 export function CartIndicator() {
-  const status = useCsrQuery("getUserCart");
+  const ctx = useCsrRequestContext();
+  const status = useCsrQuerySimulation(
+    "getUserCart",
+    "csr.Cart",
+    ctx?.requestId ?? "",
+    ctx?.requestStartTs ?? 0,
+  );
 
   if (status === "pending") {
     return <span className="text-sm text-zinc-400">Cart (--)</span>;

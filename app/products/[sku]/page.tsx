@@ -1,6 +1,7 @@
 import { TracedBoundary } from "@/components/TracedBoundary";
 import { MetricsEmbed } from "@/components/MetricsEmbed";
 import { ClientQueryOrchestrator } from "@/components/ClientQueryOrchestrator";
+import { HydrationCost } from "@/components/pdp/HydrationCost";
 import { executeGqlQuery } from "@/lib/gql-query";
 import { getRequestContext } from "@/lib/boundary-context";
 import { metricsStore } from "@/lib/metrics-store";
@@ -124,6 +125,9 @@ export default async function PDPPage({
       requestId={ctx.requestId}
       requestStartTs={ctx.requestStartTs}
     >
+      {/* Simulates expensive client-side init (analytics, A/B SDK, etc.) */}
+      <HydrationCost ms={120} />
+
       {/* Nav */}
       <TracedBoundary
         name="Nav"

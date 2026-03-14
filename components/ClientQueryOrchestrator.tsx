@@ -1,10 +1,14 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { createContext, useContext } from "react";
 import type { ReactNode } from "react";
-import { simulateCsrQueries } from "@/lib/csr-simulation";
-import { clientMetricsStore } from "@/lib/client-metrics-store";
-import { CsrQueryProvider, useCsrQueryContext } from "@/lib/csr-query-context";
+
+interface CsrRequestContextValue {
+  requestId: string;
+  requestStartTs: number;
+}
+
+const CsrRequestContext = createContext<CsrRequestContextValue | null>(null);
 
 interface Props {
   requestId: string;
@@ -13,8 +17,8 @@ interface Props {
 }
 
 /**
- * Wraps children in CsrQueryProvider and runs the CSR query simulation.
- * UI components inside use useCsrQuery() to know when their query resolves.
+ * Provides request context (requestId, requestStartTs) to client components
+ * so they can each run their own CSR query simulation.
  */
 export function ClientQueryOrchestrator({
   requestId,
@@ -22,41 +26,15 @@ export function ClientQueryOrchestrator({
   children,
 }: Props) {
   return (
-    <CsrQueryProvider>
-      <CsrQueryRunner
-        requestId={requestId}
-        requestStartTs={requestStartTs}
-      />
+    <CsrRequestContext.Provider value={{ requestId, requestStartTs }}>
       {children}
-    </CsrQueryProvider>
+    </CsrRequestContext.Provider>
   );
 }
 
-function CsrQueryRunner({
-  requestId,
-  requestStartTs,
-}: {
-  requestId: string;
-  requestStartTs: number;
-}) {
-  const ctx = useCsrQueryContext();
-  const ran = useRef(false);
-
-  useEffect(() => {
-    if (ran.current) return;
-    ran.current = true;
-
-    const hydrationMs = Date.now() - requestStartTs;
-
-    simulateCsrQueries(
-      requestId,
-      requestStartTs,
-      hydrationMs,
-      (queryName) => ctx?.markComplete(queryName),
-    ).then((result) => {
-      clientMetricsStore.appendCsrMetrics(requestId, result);
-    });
-  }, [requestId, requestStartTs, ctx]);
-
-  return null;
+/**
+ * Hook to access the SSR request context from client components.
+ */
+export function useCsrRequestContext() {
+  return useContext(CsrRequestContext);
 }

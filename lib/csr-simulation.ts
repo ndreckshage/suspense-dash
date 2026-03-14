@@ -1,35 +1,21 @@
 /**
  * Client-side query simulation engine.
  *
- * Simulates realistic post-hydration GraphQL queries using the same
- * federation definitions and latency distributions as the server-side
- * simulation. Returns metric objects with phase: "csr" that can be
- * merged into the existing metrics pipeline.
+ * Provides a hook for individual components to simulate their own
+ * post-hydration GraphQL query, recording metrics for the dashboard.
+ * Each component triggers its own simulation in useEffect, which
+ * naturally avoids hydration mismatches since effects only fire
+ * after the component has hydrated.
  */
 
+import { useState, useEffect, useRef } from "react";
 import { GQL_QUERIES, SUBGRAPH_OPERATIONS } from "./gql-federation";
+import { clientMetricsStore } from "./client-metrics-store";
 import type {
   BoundaryMetric,
   QueryMetric,
   SubgraphOperationMetric,
 } from "./metrics-store";
-
-/** Max time (ms) after hydration to wait for all init queries */
-const CSR_TIMEOUT_MS = 3000;
-
-/**
- * CSR query schedule — defines which queries fire and when (relative to hydration).
- * Stagger pattern: 2 immediate (cart + favorites), 1 deferred (Q&A).
- */
-export const CSR_QUERY_SCHEDULE: {
-  queryName: string;
-  boundaryPath: string;
-  delayMs: number;
-}[] = [
-  { queryName: "getUserCart", boundaryPath: "csr.Cart", delayMs: 0 },
-  { queryName: "getUserFavorites", boundaryPath: "csr.Favorites", delayMs: 0 },
-  { queryName: "getReviewsQA", boundaryPath: "csr.ReviewsQA", delayMs: 200 },
-];
 
 /**
  * Simulates subgraph operation latency with the same distribution as the
@@ -52,131 +38,124 @@ function simulateLatencyMs(baseMs: number): number {
   return Math.max(5, Math.round(baseMs * multiplier));
 }
 
-/** Sleep utility for client-side use */
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export interface CsrSimulationResult {
-  boundaries: BoundaryMetric[];
-  queries: QueryMetric[];
-  subgraphOps: SubgraphOperationMetric[];
-  hydration_ms: number;
-}
-
 /**
- * Run the full CSR query simulation.
+ * Hook that simulates a CSR GraphQL query for a component.
  *
+ * Returns "pending" until the simulated query completes, then "complete".
+ * Records metrics (boundary, query, subgraph ops) to the client metrics store.
+ *
+ * @param queryName - The GQL query name (must exist in GQL_QUERIES)
+ * @param boundaryPath - The boundary path for metrics (e.g. "csr.Cart")
  * @param requestId - The SSR request ID to correlate with
- * @param requestStartTs - The original request start timestamp (Date.now() from server)
- * @param hydrationMs - Milliseconds from request start to hydration
- * @returns Metrics for all CSR queries, bounded by CSR_TIMEOUT_MS
+ * @param requestStartTs - The original request start timestamp
+ * @param delayMs - Optional delay before firing the query (default 0)
  */
-export async function simulateCsrQueries(
+export function useCsrQuerySimulation(
+  queryName: string,
+  boundaryPath: string,
   requestId: string,
   requestStartTs: number,
-  hydrationMs: number,
-  onQueryComplete?: (queryName: string) => void,
-): Promise<CsrSimulationResult> {
-  const boundaries: BoundaryMetric[] = [];
-  const queries: QueryMetric[] = [];
-  const subgraphOps: SubgraphOperationMetric[] = [];
+  delayMs: number = 0,
+): "pending" | "complete" {
+  const [status, setStatus] = useState<"pending" | "complete">("pending");
+  const ran = useRef(false);
 
-  const route = "/products/[sku]";
-
-  async function executeQuery(
-    queryName: string,
-    boundaryPath: string,
-    delayMs: number,
-  ) {
-    // Wait for the stagger delay
-    if (delayMs > 0) await sleep(delayMs);
+  useEffect(() => {
+    if (ran.current) return;
+    ran.current = true;
 
     const queryDef = GQL_QUERIES[queryName];
-    if (!queryDef) return;
+    if (!queryDef) {
+      setStatus("complete");
+      return;
+    }
 
-    // wall_start_ms is relative to the original request start
+    const route = "/products/[sku]";
+    const hydrationMs = Date.now() - requestStartTs;
     const wallStart = hydrationMs + delayMs;
-    const queryStart = performance.now();
 
-    // Simulate all subgraph ops in parallel (like the server does)
-    const opResults = await Promise.all(
-      queryDef.operations.map(async (opName) => {
-        const opDef = SUBGRAPH_OPERATIONS[opName];
-        if (!opDef) return null;
+    (async () => {
+      if (delayMs > 0) await sleep(delayMs);
 
-        const latency = simulateLatencyMs(opDef.baseMs);
-        await sleep(latency);
+      const queryStart = performance.now();
 
-        return {
-          opName,
-          duration_ms: latency,
-          subgraphName: opDef.subgraph,
-        };
-      }),
-    );
+      const opResults = await Promise.all(
+        queryDef.operations.map(async (opName) => {
+          const opDef = SUBGRAPH_OPERATIONS[opName];
+          if (!opDef) return null;
 
-    const queryDuration = Math.round(performance.now() - queryStart);
+          const latency = simulateLatencyMs(opDef.baseMs);
+          await sleep(latency);
 
-    // Record subgraph op metrics
-    for (const result of opResults) {
-      if (!result) continue;
-      subgraphOps.push({
+          return {
+            opName,
+            duration_ms: latency,
+            subgraphName: opDef.subgraph,
+          };
+        }),
+      );
+
+      const queryDuration = Math.round(performance.now() - queryStart);
+
+      // Record metrics
+      const subgraphOps: SubgraphOperationMetric[] = [];
+      for (const result of opResults) {
+        if (!result) continue;
+        subgraphOps.push({
+          timestamp: Date.now(),
+          requestId,
+          route,
+          boundary_path: boundaryPath,
+          queryName,
+          operationName: result.opName,
+          subgraphName: result.subgraphName,
+          duration_ms: result.duration_ms,
+          cached: false,
+          phase: "csr",
+        });
+      }
+
+      const queries: QueryMetric[] = [{
         timestamp: Date.now(),
         requestId,
         route,
         boundary_path: boundaryPath,
         queryName,
-        operationName: result.opName,
-        subgraphName: result.subgraphName,
-        duration_ms: result.duration_ms,
-        cached: false,
+        duration_ms: queryDuration,
+        subgraphOps: queryDef.operations,
+        cachedOps: [],
+        fullyCached: false,
         phase: "csr",
+      }];
+
+      const boundaries: BoundaryMetric[] = [{
+        timestamp: Date.now(),
+        requestId,
+        route,
+        boundary_path: boundaryPath,
+        wall_start_ms: wallStart,
+        render_duration_ms: queryDuration,
+        fetch_duration_ms: queryDuration,
+        render_cost_ms: 0,
+        blocked_ms: 0,
+        is_lcp_critical: false,
+        phase: "csr",
+      }];
+
+      clientMetricsStore.appendCsrMetrics(requestId, {
+        boundaries,
+        queries,
+        subgraphOps,
+        hydration_ms: hydrationMs,
       });
-    }
 
-    // Record query metric
-    queries.push({
-      timestamp: Date.now(),
-      requestId,
-      route,
-      boundary_path: boundaryPath,
-      queryName,
-      duration_ms: queryDuration,
-      subgraphOps: queryDef.operations,
-      cachedOps: [],
-      fullyCached: false,
-      phase: "csr",
-    });
+      setStatus("complete");
+    })();
+  }, [queryName, boundaryPath, requestId, requestStartTs, delayMs]);
 
-    // Record boundary metric (lightweight — no thread blocking on client)
-    boundaries.push({
-      timestamp: Date.now(),
-      requestId,
-      route,
-      boundary_path: boundaryPath,
-      wall_start_ms: wallStart,
-      render_duration_ms: queryDuration,
-      fetch_duration_ms: queryDuration,
-      render_cost_ms: 0,
-      blocked_ms: 0,
-      is_lcp_critical: false,
-      phase: "csr",
-    });
-
-    // Notify UI that this query has resolved
-    onQueryComplete?.(queryName);
-  }
-
-  // Run all queries with a timeout cap
-  await Promise.race([
-    Promise.all(
-      CSR_QUERY_SCHEDULE.map((q) =>
-        executeQuery(q.queryName, q.boundaryPath, q.delayMs),
-      ),
-    ),
-    sleep(CSR_TIMEOUT_MS),
-  ]);
-
-  return { boundaries, queries, subgraphOps, hydration_ms: hydrationMs };
+  return status;
 }

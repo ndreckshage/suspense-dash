@@ -1,6 +1,7 @@
 "use client";
 
-import { useCsrQuery } from "@/lib/csr-query-context";
+import { useCsrQuerySimulation } from "@/lib/csr-simulation";
+import { useCsrRequestContext } from "@/components/ClientQueryOrchestrator";
 
 interface QAItem {
   question: string;
@@ -31,10 +32,17 @@ const MOCK_QA: QAItem[] = [
 
 /**
  * Client-side Q&A section loaded after hydration via getReviewsQA CSR query.
- * Waits for the actual query simulation to resolve before showing content.
+ * Runs its own query simulation with a 200ms stagger delay.
  */
 export function ReviewsQA() {
-  const status = useCsrQuery("getReviewsQA");
+  const ctx = useCsrRequestContext();
+  const status = useCsrQuerySimulation(
+    "getReviewsQA",
+    "csr.ReviewsQA",
+    ctx?.requestId ?? "",
+    ctx?.requestStartTs ?? 0,
+    200, // stagger delay
+  );
 
   return (
     <div className="px-6 py-6 border-t border-zinc-800">
