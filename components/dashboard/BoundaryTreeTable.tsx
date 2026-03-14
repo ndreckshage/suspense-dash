@@ -132,19 +132,20 @@ const median = medianUtil;
 
 // Boundary-level SLOs
 const BOUNDARY_SLOS: Record<string, number> = {
-  shell: 60,
-  "shell.nav": 200,
-  "shell.content": 120,
-  "shell.content.breadcrumbs": 120,
-  "shell.content.main.hero": 60,
-  "shell.content.main.thumbnails": 120,
-  "shell.content.main.pdp": 100,
-  "shell.content.main.pricing": 600,
-  "shell.content.main.bullets": 80,
-  "shell.content.main.options": 80,
-  "shell.content.carousels": 400,
-  "shell.content.reviews": 550,
-  "shell.footer": 100,
+  Layout: 60,
+  "Layout.Nav": 200,
+  "Layout.Content": 120,
+  "Layout.Content.Breadcrumbs": 120,
+  "Layout.Content.Main.Hero": 60,
+  "Layout.Content.Main.Thumbnails": 120,
+  "Layout.Content.Main.Title": 100,
+  "Layout.Content.Main.Pricing": 600,
+  "Layout.Content.Main.Bullets": 80,
+  "Layout.Content.Main.Options": 80,
+  "Layout.Content.Main.AddToCart": 20,
+  "Layout.Content.Carousels": 400,
+  "Layout.Content.Reviews": 550,
+  "Layout.Footer": 100,
 };
 
 interface TreeNode {

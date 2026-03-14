@@ -24,19 +24,20 @@ interface BoundaryTiming {
 }
 
 const BOUNDARY_COLORS: Record<string, string> = {
-  shell: "rgb(100, 116, 139)",
-  nav: "rgb(249, 115, 22)",
-  content: "rgb(163, 163, 163)",
-  breadcrumbs: "rgb(163, 163, 163)",
-  hero: "rgb(6, 182, 212)",
-  thumbnails: "rgb(6, 182, 212)",
-  pdp: "rgb(59, 130, 246)",
-  pricing: "rgb(139, 92, 246)",
-  bullets: "rgb(59, 130, 246)",
-  options: "rgb(139, 92, 246)",
-  carousels: "rgb(236, 72, 153)",
-  reviews: "rgb(34, 197, 94)",
-  footer: "rgb(100, 116, 139)",
+  Layout: "rgb(100, 116, 139)",
+  Nav: "rgb(249, 115, 22)",
+  Content: "rgb(163, 163, 163)",
+  Breadcrumbs: "rgb(163, 163, 163)",
+  Hero: "rgb(6, 182, 212)",
+  Thumbnails: "rgb(6, 182, 212)",
+  Title: "rgb(59, 130, 246)",
+  Pricing: "rgb(139, 92, 246)",
+  Bullets: "rgb(59, 130, 246)",
+  Options: "rgb(139, 92, 246)",
+  AddToCart: "rgb(139, 92, 246)",
+  Carousels: "rgb(236, 72, 153)",
+  Reviews: "rgb(34, 197, 94)",
+  Footer: "rgb(100, 116, 139)",
 };
 
 function median(values: number[]): number {
@@ -145,14 +146,14 @@ export function LcpCriticalPath({ boundaries, queries, pctl }: Props) {
       }
 
       // Shell end time (waterfall marker)
-      const shell = timings.find((t) => t.name === "shell");
-      const shellEnd = shell
-        ? shell.wallStart + shell.fetchDuration + shell.renderCost
+      const layout = timings.find((t) => t.name === "Layout");
+      const shellEnd = layout
+        ? layout.wallStart + layout.fetchDuration + layout.renderCost
         : 0;
 
       // LCP boundary — hero image is the true LCP element (largest visible content)
-      const hero = timings.find((t) => t.lcpCritical && t.name === "hero");
-      const pdp = timings.find((t) => t.lcpCritical && t.name === "pdp");
+      const hero = timings.find((t) => t.lcpCritical && t.name === "Hero");
+      const pdp = timings.find((t) => t.lcpCritical && t.name === "Title");
       const lcpBoundary = hero ?? pdp;
       const lcpDataReady = lcpBoundary
         ? lcpBoundary.wallStart + lcpBoundary.fetchDuration
@@ -255,7 +256,7 @@ export function LcpCriticalPath({ boundaries, queries, pctl }: Props) {
 
           <div className="space-y-1.5 relative">
             {timings
-              .filter((t) => t.name !== "shell")
+              .filter((t) => t.name !== "Layout")
               .map((t) => {
                 const leftPct = (t.wallStart / maxMs) * 100;
                 const widthPct = Math.max(
@@ -383,22 +384,22 @@ export function LcpCriticalPath({ boundaries, queries, pctl }: Props) {
       {/* Summary */}
       <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs font-mono">
         <div>
-          <span className="text-zinc-500">Shell (waterfall): </span>
+          <span className="text-zinc-500">Layout (waterfall): </span>
           <span className="text-amber-400">
-            {timings.find((t) => t.name === "shell")?.total ?? 0}ms
+            {timings.find((t) => t.name === "Layout")?.total ?? 0}ms
           </span>
         </div>
         <div>
           <span className="text-zinc-500">Nav render cost: </span>
           <span className="text-orange-400">
-            {timings.find((t) => t.name === "nav")?.renderCost ?? 0}ms
+            {timings.find((t) => t.name === "Nav")?.renderCost ?? 0}ms
           </span>
         </div>
         <div>
           <span className="text-zinc-500">LCP query: </span>
           <span className="text-zinc-300">
-            {timings.find((t) => t.name === "pdp")?.fetchDuration ??
-              timings.find((t) => t.name === "hero")?.fetchDuration ??
+            {timings.find((t) => t.name === "Title")?.fetchDuration ??
+              timings.find((t) => t.name === "Hero")?.fetchDuration ??
               0}
             ms
           </span>

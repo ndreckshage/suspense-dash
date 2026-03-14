@@ -88,7 +88,7 @@ export const GQL_QUERIES: Record<string, GqlQueryDef> = {
     operations: ["media.thumbnails"],
     sloMs: 70,
   },
-  // Shared between pdp + bullets boundaries — second call is a React cache() hit
+  // Shared between Title + Bullets + Options boundaries — second/third calls are React cache() hits
   getProductInfo: {
     operations: ["product.core", "product.bullets"],
     sloMs: 80,

@@ -21,7 +21,7 @@ export const metadata: Metadata = {
 /**
  * Root layout — intentionally minimal.
  *
- * All instrumented suspense boundaries (shell, nav, pdp, footer) live in the
+ * All instrumented suspense boundaries (Layout, Nav, Title, Footer) live in the
  * page component. This is because Next.js App Router renders layouts and pages
  * concurrently — a blocking await in the layout does NOT delay the page's
  * rendering. To correctly demonstrate the parent-blocks-children pattern, the
