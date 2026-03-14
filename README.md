@@ -7,6 +7,7 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
   -- shell => Layout
   -- pdp => title
 - Number of calls: Would like to be able to easily see total number of queries / and calls to subgraphs. Filter by calls to subgraphs.
+- Client queries: This is optimized for core server component render which is great. Would also like it to work to show client side queries too, so we can capture the full E2E picture of what queries are made SSR and what are made CSR.
 - Update readme and a plan for how we would actually implement this for Datadog metrics. Is there a path to write to DD, use those metrics, but to power this interface?
 
 ## Getting Started
