@@ -258,6 +258,10 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl }: Pr
   const expandAll = useCallback(() => setExpanded(new Set(allBoundaryPaths)), [allBoundaryPaths]);
   const collapseAll = useCallback(() => setExpanded(new Set()), []);
 
+  // LCP path filter
+  const [lcpFilter, setLcpFilter] = useState(false);
+  const toggleLcpFilter = useCallback(() => setLcpFilter((prev) => !prev), []);
+
   // Subgraph filter — empty means "show all"
   const [selectedSubgraphs, setSelectedSubgraphs] = useState<Set<string>>(new Set());
   const toggleSubgraphFilter = useCallback((name: string) => {
@@ -270,17 +274,49 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl }: Pr
   }, []);
   const clearSubgraphFilter = useCallback(() => setSelectedSubgraphs(new Set()), []);
 
-  // Compute which boundaries match the subgraph filter
-  const filteredBoundaryPaths = useMemo(() => {
-    if (selectedSubgraphs.size === 0) return null; // no filter
-    const matching = new Set<string>();
-    for (const op of subgraphOps) {
-      if (selectedSubgraphs.has(op.subgraphName)) {
-        matching.add(op.boundary_path);
+  // Compute LCP path boundary set (LCP boundaries + ancestors)
+  const lcpBoundaryPaths = useMemo(() => {
+    const lcpPaths = new Set<string>();
+    for (const b of boundaries) {
+      if (b.is_lcp_critical) lcpPaths.add(b.boundary_path);
+    }
+    // Add all ancestor boundaries
+    const withAncestors = new Set(lcpPaths);
+    for (const path of lcpPaths) {
+      let candidate = getParentPath(path);
+      while (candidate !== null) {
+        withAncestors.add(candidate);
+        candidate = getParentPath(candidate);
       }
     }
-    return matching;
-  }, [selectedSubgraphs, subgraphOps]);
+    return withAncestors;
+  }, [boundaries]);
+
+  // Compute which boundaries match the subgraph filter
+  const filteredBoundaryPaths = useMemo(() => {
+    const hasSubgraphFilter = selectedSubgraphs.size > 0;
+    if (!hasSubgraphFilter && !lcpFilter) return null; // no filter
+
+    const subgraphMatching = new Set<string>();
+    if (hasSubgraphFilter) {
+      for (const op of subgraphOps) {
+        if (selectedSubgraphs.has(op.subgraphName)) {
+          subgraphMatching.add(op.boundary_path);
+        }
+      }
+    }
+
+    // Intersect filters if both active, otherwise use whichever is active
+    if (hasSubgraphFilter && lcpFilter) {
+      const intersection = new Set<string>();
+      for (const path of subgraphMatching) {
+        if (lcpBoundaryPaths.has(path)) intersection.add(path);
+      }
+      return intersection;
+    }
+    if (lcpFilter) return lcpBoundaryPaths;
+    return subgraphMatching;
+  }, [selectedSubgraphs, subgraphOps, lcpFilter, lcpBoundaryPaths]);
 
   // Call count summary stats (uncached = actual network calls)
   const callSummary = useMemo(() => {
@@ -506,9 +542,21 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl }: Pr
 
   return (
     <div className="overflow-x-auto">
-      {/* Subgraph filter chips */}
+      {/* Filter chips */}
       <div className="flex flex-wrap items-center gap-x-1 gap-y-1 mb-2 text-xs">
         <span className="text-zinc-600 mr-1">Filter:</span>
+        <button
+          onClick={toggleLcpFilter}
+          className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border transition-all ${
+            lcpFilter
+              ? "border-blue-500 text-blue-300 bg-blue-500/10"
+              : "border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50"
+          }`}
+        >
+          <span className="w-2 h-2 rounded-full flex-shrink-0 bg-blue-400" />
+          LCP Path
+        </button>
+        <span className="text-zinc-800 mx-0.5">|</span>
         {Object.entries(SUBGRAPHS).map(([name, { color }]) => {
           const isActive = selectedSubgraphs.has(name);
           const hasFilter = selectedSubgraphs.size > 0;
@@ -532,9 +580,9 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl }: Pr
             </button>
           );
         })}
-        {selectedSubgraphs.size > 0 && (
+        {(selectedSubgraphs.size > 0 || lcpFilter) && (
           <button
-            onClick={clearSubgraphFilter}
+            onClick={() => { clearSubgraphFilter(); setLcpFilter(false); }}
             className="text-zinc-500 hover:text-zinc-300 ml-2 underline"
           >
             Clear
