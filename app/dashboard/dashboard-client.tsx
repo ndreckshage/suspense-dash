@@ -116,6 +116,12 @@ export function DashboardClient({ initialTab }: { initialTab: TabKey }) {
                   YAML
                 </span>
               )}
+              <a
+                href="/products/demo-sku"
+                className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+              >
+                View Demo PDP
+              </a>
             </div>
             <div className="flex items-center gap-2 mt-3">
               <select
@@ -266,12 +272,6 @@ export function DashboardClient({ initialTab }: { initialTab: TabKey }) {
           >
             Clear
           </button>
-          <a
-            href="/products/demo-sku"
-            className="px-3 py-1.5 text-sm text-blue-400 hover:text-blue-300 transition-colors"
-          >
-            View Demo &rarr;
-          </a>
         </div>
       </div>
     </div>
