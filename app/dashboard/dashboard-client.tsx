@@ -8,6 +8,7 @@ import {
   clientMetricsStore,
   type ClientMetrics,
 } from "@/lib/client-metrics-store";
+import type { MockDashboardData } from "@/lib/mock-metrics";
 import { YamlUpload } from "@/components/dashboard/YamlUpload";
 
 const PERCENTILE_OPTIONS = [50, 75, 90, 95, 99] as const;
@@ -34,6 +35,7 @@ const PAGE_TYPES = [
 
 export function DashboardClient({ initialTab }: { initialTab: TabKey }) {
   const [metrics, setMetrics] = useState<ClientMetrics | null>(null);
+  const [mockData, setMockData] = useState<MockDashboardData | null>(null);
   const [activeTab, setActiveTabState] = useState<TabKey>(initialTab);
   const [loading, setLoading] = useState(true);
   const [pctl, setPctl] = useState<number>(99);
@@ -67,8 +69,15 @@ export function DashboardClient({ initialTab }: { initialTab: TabKey }) {
 
   const refreshMetrics = useCallback(() => {
     setLoading(true);
+    setMockData(null);
     const data = clientMetricsStore.getMetrics();
     setMetrics(data);
+    setLoading(false);
+  }, []);
+
+  const loadMockData = useCallback((data: MockDashboardData) => {
+    setMockData(data);
+    setMetrics(null);
     setLoading(false);
   }, []);
 
@@ -78,14 +87,19 @@ export function DashboardClient({ initialTab }: { initialTab: TabKey }) {
 
   function clearMetrics() {
     clientMetricsStore.clear();
+    setMockData(null);
     refreshMetrics();
   }
 
   async function loadDemoData() {
     setLoading(true);
+    setMockData(null);
     await clientMetricsStore.loadSeedData();
     refreshMetrics();
   }
+
+  const isMock = mockData !== null;
+  const hasData = isMock || (metrics !== null && metrics.totalPageLoads > 0);
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 px-4 py-8 md:px-6 md:py-12 font-mono overflow-x-hidden">
@@ -97,6 +111,11 @@ export function DashboardClient({ initialTab }: { initialTab: TabKey }) {
               <h1 className="text-base md:text-xl font-bold text-white">
                 Suspense Dash
               </h1>
+              {isMock && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-900/50 border border-blue-800 text-blue-300">
+                  YAML
+                </span>
+              )}
               <a
                 href="/products/demo-sku"
                 className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
@@ -133,16 +152,19 @@ export function DashboardClient({ initialTab }: { initialTab: TabKey }) {
                 ))}
               </select>
               <span className="text-xs text-zinc-500 truncate hidden sm:inline">
-                {currentPage.route} &mdash;{" "}
-                {metrics ? `${metrics.totalPageLoads} loads` : "loading..."}
+                {isMock
+                  ? `${mockData.route} — YAML mock`
+                  : `${currentPage.route} — ${metrics ? `${metrics.totalPageLoads} loads` : "loading..."}`}
               </span>
               <span className="text-xs text-zinc-500 truncate sm:hidden">
-                {metrics ? `${metrics.totalPageLoads} loads` : "loading..."}
+                {isMock
+                  ? "YAML mock"
+                  : metrics ? `${metrics.totalPageLoads} loads` : "loading..."}
               </span>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <YamlUpload onLoad={refreshMetrics} />
+            <YamlUpload onLoad={loadMockData} />
             <button
               onClick={loadDemoData}
               className="px-3 py-1.5 text-sm border border-zinc-700 rounded text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 transition-colors flex-shrink-0"
@@ -194,11 +216,11 @@ export function DashboardClient({ initialTab }: { initialTab: TabKey }) {
 
         {/* Content */}
         <div className="bg-zinc-900/50 rounded-lg border border-zinc-800 p-2 md:p-4">
-          {loading && !metrics ? (
+          {loading && !hasData ? (
             <div className="text-center py-12 text-zinc-500 animate-pulse">
               Loading metrics...
             </div>
-          ) : metrics && metrics.totalPageLoads === 0 ? (
+          ) : !hasData ? (
             <div className="text-center py-12 text-zinc-500">
               <p>No metrics data yet.</p>
               <p className="text-sm mt-3">
@@ -230,6 +252,7 @@ export function DashboardClient({ initialTab }: { initialTab: TabKey }) {
               hydrationTimes={metrics?.hydrationTimes}
               loafEntries={metrics?.loafEntries}
               navigationTimings={metrics?.navigationTimings}
+              mock={mockData?.waterfall}
             />
           ) : activeTab === "tree" ? (
             <BoundaryTreeTable
@@ -237,12 +260,14 @@ export function DashboardClient({ initialTab }: { initialTab: TabKey }) {
               queries={metrics?.queries ?? []}
               subgraphOps={metrics?.subgraphOps ?? []}
               pctl={pctl}
+              mock={mockData?.tree}
             />
           ) : (
             <SubgraphCallsTab
               queries={metrics?.queries ?? []}
               subgraphOps={metrics?.subgraphOps ?? []}
               pctl={pctl}
+              mock={mockData?.subgraphs}
             />
           )}
         </div>

@@ -12,12 +12,15 @@ import {
   SUBGRAPHS,
 } from "@/lib/gql-federation";
 import { percentile, median as medianUtil } from "@/lib/percentile";
+import type { MockTreeData } from "@/lib/mock-metrics";
 
 interface Props {
   boundaries: BoundaryMetric[];
   queries: QueryMetric[];
   subgraphOps: SubgraphOperationMetric[];
   pctl: number;
+  /** Pre-computed mock data keyed by percentile */
+  mock?: Record<number, MockTreeData>;
 }
 
 // --- Tree structure: boundary → query → subgraph-op ---
@@ -227,24 +230,15 @@ function getDepth(item: TreeItem, depthMap: Map<string, number>): number {
   return item.type === "query" ? boundaryDepth + 1 : boundaryDepth + 2;
 }
 
-export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl }: Props) {
-  // Build tree structure dynamically from recorded metrics
+export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock }: Props) {
+  // Build tree structure dynamically from recorded metrics (skipped in mock mode)
   const treeStructure = useMemo(
-    () => buildTreeFromMetrics(boundaries, queries, subgraphOps),
-    [boundaries, queries, subgraphOps],
-  );
-
-  const allBoundaryPaths = useMemo(
-    () => treeStructure.filter((t) => t.type === "boundary").map((t) => t.boundaryPath),
-    [treeStructure],
+    () => mock ? [] : buildTreeFromMetrics(boundaries, queries, subgraphOps),
+    [boundaries, queries, subgraphOps, mock],
   );
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-
-  // Auto-expand all boundaries when tree structure changes
-  useMemo(() => {
-    setExpanded(new Set(allBoundaryPaths));
-  }, [allBoundaryPaths]);
+  const [lastExpandKey, setLastExpandKey] = useState("");
 
   const toggleExpand = useCallback((path: string) => {
     setExpanded((prev) => {
@@ -255,83 +249,10 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl }: Pr
     });
   }, []);
 
-  const expandAll = useCallback(() => setExpanded(new Set(allBoundaryPaths)), [allBoundaryPaths]);
-  const collapseAll = useCallback(() => setExpanded(new Set()), []);
-
-  // LCP path filter
-  const [lcpFilter, setLcpFilter] = useState(false);
-  const toggleLcpFilter = useCallback(() => setLcpFilter((prev) => !prev), []);
-
-  // Subgraph filter — empty means "show all"
-  const [selectedSubgraphs, setSelectedSubgraphs] = useState<Set<string>>(new Set());
-  const toggleSubgraphFilter = useCallback((name: string) => {
-    setSelectedSubgraphs((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
-    });
-  }, []);
-  const clearSubgraphFilter = useCallback(() => setSelectedSubgraphs(new Set()), []);
-
-  // Compute LCP path boundary set (LCP boundaries + ancestors)
-  const lcpBoundaryPaths = useMemo(() => {
-    const lcpPaths = new Set<string>();
-    for (const b of boundaries) {
-      if (b.is_lcp_critical) lcpPaths.add(b.boundary_path);
-    }
-    // Add all ancestor boundaries
-    const withAncestors = new Set(lcpPaths);
-    for (const path of lcpPaths) {
-      let candidate = getParentPath(path);
-      while (candidate !== null) {
-        withAncestors.add(candidate);
-        candidate = getParentPath(candidate);
-      }
-    }
-    return withAncestors;
-  }, [boundaries]);
-
-  // Compute which boundaries match the subgraph filter
-  const filteredBoundaryPaths = useMemo(() => {
-    const hasSubgraphFilter = selectedSubgraphs.size > 0;
-    if (!hasSubgraphFilter && !lcpFilter) return null; // no filter
-
-    const subgraphMatching = new Set<string>();
-    if (hasSubgraphFilter) {
-      for (const op of subgraphOps) {
-        if (selectedSubgraphs.has(op.subgraphName)) {
-          subgraphMatching.add(op.boundary_path);
-        }
-      }
-    }
-
-    // Intersect filters if both active, otherwise use whichever is active
-    if (hasSubgraphFilter && lcpFilter) {
-      const intersection = new Set<string>();
-      for (const path of subgraphMatching) {
-        if (lcpBoundaryPaths.has(path)) intersection.add(path);
-      }
-      return intersection;
-    }
-    if (lcpFilter) return lcpBoundaryPaths;
-    return subgraphMatching;
-  }, [selectedSubgraphs, subgraphOps, lcpFilter, lcpBoundaryPaths]);
-
-  // Call count summary stats (uncached = actual network calls)
-  const callSummary = useMemo(() => {
-    if (subgraphOps.length === 0) return null;
-    const requestIds = new Set(subgraphOps.map((o) => o.requestId));
-    const numRequests = requestIds.size;
-    const uncachedOps = subgraphOps.filter((o) => !o.cached).length;
-    const cachedOps = subgraphOps.filter((o) => o.cached).length;
-    return {
-      callsPerReq: Math.round((uncachedOps / numRequests) * 10) / 10,
-      dedupedPerReq: Math.round((cachedOps / numRequests) * 10) / 10,
-    };
-  }, [subgraphOps]);
-
   const treeNodes = useMemo(() => {
+    // Mock data path — use pre-computed nodes directly
+    if (mock?.[pctl]?.nodes) return mock[pctl].nodes;
+
     if (boundaries.length === 0 && queries.length === 0) return [];
 
     // Group metrics by key
@@ -498,7 +419,107 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl }: Pr
     }
 
     return nodes;
-  }, [treeStructure, boundaries, queries, subgraphOps, pctl]);
+  }, [treeStructure, boundaries, queries, subgraphOps, pctl, mock]);
+
+  // LCP path filter
+  const [lcpFilter, setLcpFilter] = useState(false);
+  const toggleLcpFilter = useCallback(() => setLcpFilter((prev) => !prev), []);
+
+  // Subgraph filter — empty means "show all"
+  const [selectedSubgraphs, setSelectedSubgraphs] = useState<Set<string>>(new Set());
+  const toggleSubgraphFilter = useCallback((name: string) => {
+    setSelectedSubgraphs((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }, []);
+  const clearSubgraphFilter = useCallback(() => setSelectedSubgraphs(new Set()), []);
+
+  // Compute LCP path boundary set (LCP boundaries + ancestors)
+  const lcpBoundaryPaths = useMemo(() => {
+    const lcpPaths = new Set<string>();
+    // Derive from treeNodes (works for both live and mock)
+    for (const n of treeNodes) {
+      if (n.lcpCritical) lcpPaths.add(n.boundaryPath);
+    }
+    // Add all ancestor boundaries
+    const withAncestors = new Set(lcpPaths);
+    for (const path of lcpPaths) {
+      let candidate = getParentPath(path);
+      while (candidate !== null) {
+        withAncestors.add(candidate);
+        candidate = getParentPath(candidate);
+      }
+    }
+    return withAncestors;
+  }, [treeNodes]);
+
+  // Compute which boundaries match the subgraph filter
+  const filteredBoundaryPaths = useMemo(() => {
+    const hasSubgraphFilter = selectedSubgraphs.size > 0;
+    if (!hasSubgraphFilter && !lcpFilter) return null; // no filter
+
+    const subgraphMatching = new Set<string>();
+    if (hasSubgraphFilter) {
+      // In mock mode, derive from treeNodes; in live mode, from subgraphOps
+      if (mock) {
+        for (const n of treeNodes) {
+          if (n.type === "subgraph-op" && n.subgraphName && selectedSubgraphs.has(n.subgraphName)) {
+            subgraphMatching.add(n.boundaryPath);
+          }
+        }
+      } else {
+        for (const op of subgraphOps) {
+          if (selectedSubgraphs.has(op.subgraphName)) {
+            subgraphMatching.add(op.boundary_path);
+          }
+        }
+      }
+    }
+
+    // Intersect filters if both active, otherwise use whichever is active
+    if (hasSubgraphFilter && lcpFilter) {
+      const intersection = new Set<string>();
+      for (const path of subgraphMatching) {
+        if (lcpBoundaryPaths.has(path)) intersection.add(path);
+      }
+      return intersection;
+    }
+    if (lcpFilter) return lcpBoundaryPaths;
+    return subgraphMatching;
+  }, [selectedSubgraphs, subgraphOps, lcpFilter, lcpBoundaryPaths, mock, treeNodes]);
+
+  // Call count summary stats (uncached = actual network calls)
+  const callSummary = useMemo(() => {
+    if (mock?.[pctl]?.callSummary !== undefined) return mock[pctl].callSummary;
+    if (subgraphOps.length === 0) return null;
+    const requestIds = new Set(subgraphOps.map((o) => o.requestId));
+    const numRequests = requestIds.size;
+    const uncachedOps = subgraphOps.filter((o) => !o.cached).length;
+    const cachedOps = subgraphOps.filter((o) => o.cached).length;
+    return {
+      callsPerReq: Math.round((uncachedOps / numRequests) * 10) / 10,
+      dedupedPerReq: Math.round((cachedOps / numRequests) * 10) / 10,
+    };
+  }, [subgraphOps, pctl, mock]);
+
+  // Derive boundary paths from computed tree nodes (works for both live and mock)
+  const allBoundaryPaths = useMemo(
+    () => treeNodes.filter((n) => n.type === "boundary").map((n) => n.boundaryPath),
+    [treeNodes],
+  );
+
+  const expandAll = useCallback(() => setExpanded(new Set(allBoundaryPaths)), [allBoundaryPaths]);
+  const collapseAll = useCallback(() => setExpanded(new Set()), []);
+
+  // Auto-expand all boundaries when tree changes
+  const expandKey = allBoundaryPaths.join(",");
+  if (expandKey !== lastExpandKey && expandKey.length > 0) {
+    setExpanded(new Set(allBoundaryPaths));
+    setLastExpandKey(expandKey);
+  }
 
   // Filter visible nodes based on expanded state + subgraph filter
   const visibleNodes = useMemo(() => {

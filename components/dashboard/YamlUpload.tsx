@@ -2,9 +2,9 @@
 
 import { useRef, useState } from "react";
 import { parseYamlDashboard } from "@/lib/yaml-import";
-import { clientMetricsStore } from "@/lib/client-metrics-store";
+import type { MockDashboardData } from "@/lib/mock-metrics";
 
-export function YamlUpload({ onLoad }: { onLoad: () => void }) {
+export function YamlUpload({ onLoad }: { onLoad: (data: MockDashboardData) => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -14,9 +14,8 @@ export function YamlUpload({ onLoad }: { onLoad: () => void }) {
     reader.onload = () => {
       try {
         const text = reader.result as string;
-        const metrics = parseYamlDashboard(text);
-        clientMetricsStore.loadMetrics(metrics);
-        onLoad();
+        const data = parseYamlDashboard(text);
+        onLoad(data);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to parse YAML");
       }
