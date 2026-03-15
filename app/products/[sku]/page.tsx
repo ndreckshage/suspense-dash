@@ -140,7 +140,7 @@ export default async function PDPPage({
         boundaryPath="Layout.Nav"
         renderCostMs={80}
         fallback={
-          <div className="bg-zinc-900 border-b border-zinc-800 px-6 py-4 h-16 animate-pulse" />
+          <div className="bg-zinc-900 border-b border-zinc-800 px-6 py-4 h-[62px] animate-pulse" />
         }
         render={async (ref) => {
           const data = await executeGqlQuery(

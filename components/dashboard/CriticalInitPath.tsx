@@ -406,7 +406,8 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
   }
 
   return (
-    <div className="space-y-6 overflow-x-hidden" style={{ minWidth: 0 }}>
+    <div className="space-y-6 overflow-x-auto md:overflow-x-hidden" style={{ minWidth: 0 }}>
+      <div className="min-w-[600px] md:min-w-0 space-y-6">
       {/* Time axis + marker labels */}
       <div>
         <div className="flex justify-between text-xs text-zinc-600 font-mono">
@@ -486,7 +487,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
       {/* Query timeline (with subgraph op sub-bars) */}
       <div>
         <div className="text-xs text-zinc-400 mb-2 font-medium">
-          Queries <span className="text-zinc-600">(concurrent async I/O)</span>
+          SSR Queries <span className="text-zinc-600">(concurrent async I/O)</span>
         </div>
         <div className="relative bg-zinc-900 rounded border border-zinc-800 p-3">
           {/* Grid lines */}
@@ -529,7 +530,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
                     key={t.boundaryPath}
                     content={<TooltipContent title={t.name} lines={tooltipLines} tag={t.lcpCritical ? "LCP" : undefined} />}
                   >
-                    <div className="relative h-7">
+                    <div className="relative h-9 md:h-7">
                       {/* Query bar (outer) */}
                       <div
                         className={`absolute top-0 h-full rounded flex items-center overflow-hidden cursor-default ${
@@ -586,8 +587,8 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
       {/* Render timeline */}
       <div>
         <div className="text-xs text-zinc-400 mb-2 font-medium">
-          Renders{" "}
-          <span className="text-zinc-600">(serialized on single thread)</span>
+          SSR Main Thread{" "}
+          <span className="text-zinc-600">(serialized renders)</span>
         </div>
         <div className="relative bg-zinc-900 rounded border border-zinc-800 p-3">
           {/* Grid lines */}
@@ -601,7 +602,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
             ))}
           </div>
 
-          <div className="relative h-8 z-10">
+          <div className="relative h-10 md:h-8 z-10">
             {renderBlocks.map((block) => {
               const leftPct = (block.start / maxMs) * 100;
               const widthPct = Math.max((block.duration / maxMs) * 100, 1.5);
@@ -674,7 +675,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
       {csrTimings.length > 0 && (
         <div>
           <div className="text-xs text-zinc-400 mb-2 font-medium">
-            Client Queries{" "}
+            CSR Queries{" "}
             <span className="text-zinc-600">(post-hydration)</span>
           </div>
           <div className="relative bg-zinc-900 rounded border border-zinc-800 p-3">
@@ -714,7 +715,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
                       />
                     }
                   >
-                    <div className="relative h-7">
+                    <div className="relative h-9 md:h-7">
                       <div
                         className="absolute top-0 h-full rounded flex items-center overflow-hidden cursor-default"
                         style={{
@@ -776,8 +777,8 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
       {/* Long Animation Frames */}
       <div>
         <div className="text-xs text-zinc-400 mb-2 font-medium">
-          Long Animation Frames{" "}
-          <span className="text-zinc-600">(client JS &gt;50ms)</span>
+          CSR Main Thread{" "}
+          <span className="text-zinc-600">(long animation frames &gt;50ms)</span>
         </div>
         <div className="relative bg-zinc-900 rounded border border-zinc-800 p-3">
           {/* Grid lines */}
@@ -828,7 +829,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
                     key={i}
                     content={<TooltipContent title="Long Animation Frame" lines={loafLines} tag="LoAF" />}
                   >
-                    <div className="relative h-7">
+                    <div className="relative h-9 md:h-7">
                       {/* Total duration (dimmer) */}
                       <div
                         className="absolute top-0 h-full rounded overflow-hidden cursor-default"
@@ -990,6 +991,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
             </span>
           </div>
         )}
+      </div>
       </div>
     </div>
   );
