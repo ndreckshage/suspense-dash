@@ -161,7 +161,7 @@ export default async function PDPPage({
             boundaryPath="Layout.Content"
             renderCostMs={2}
             fallback={
-              <div className="px-6 py-3">
+              <div className="px-6 py-2">
                 <div className="h-4 bg-zinc-800 rounded w-64 animate-pulse" />
               </div>
             }
@@ -178,7 +178,7 @@ export default async function PDPPage({
                   boundaryPath="Layout.Content.Breadcrumbs"
                   renderCostMs={5}
                   fallback={
-                    <div className="px-6 py-3">
+                    <div className="px-6 py-2">
                       <div className="h-4 bg-zinc-800 rounded w-64 animate-pulse" />
                     </div>
                   }
@@ -237,7 +237,7 @@ export default async function PDPPage({
                 boundaryPath="Layout.Content.Main.Title"
                 renderCostMs={5}
                 fallback={
-                  <div className="px-6 md:px-0 pb-4 space-y-3">
+                  <div className="px-6 md:px-0 pb-3 space-y-2">
                     {/* Title */}
                     <div className="h-9 bg-zinc-800 rounded w-3/4 animate-pulse mb-7" />
                     {/* Description */}
@@ -263,8 +263,8 @@ export default async function PDPPage({
                 boundaryPath="Layout.Content.Main.Pricing"
                 renderCostMs={3}
                 fallback={
-                  <div className="px-6 md:px-0 py-3 space-y-2">
-                    <div className="h-8 bg-zinc-800 rounded w-40 animate-pulse mb-4" />
+                  <div className="px-6 md:px-0 py-2 space-y-2">
+                    <div className="h-8 bg-zinc-800 rounded w-40 animate-pulse mb-3" />
                     <div className="h-3 bg-zinc-800 rounded w-36 animate-pulse" />
                   </div>
                 }
@@ -322,7 +322,7 @@ export default async function PDPPage({
                 boundaryPath="Layout.Content.Main.Options"
                 renderCostMs={3}
                 fallback={
-                  <div className="px-6 md:px-0 py-4 border-t border-zinc-800 space-y-3">
+                  <div className="px-6 md:px-0 py-3 border-t border-zinc-800 space-y-2">
                     <div className="h-10 bg-zinc-800 rounded w-48 animate-pulse" />
                   </div>
                 }
@@ -343,7 +343,7 @@ export default async function PDPPage({
                 boundaryPath="Layout.Content.Main.AddToCart"
                 renderCostMs={1}
                 fallback={
-                  <div className="px-6 md:px-0 py-4 border-t border-zinc-800">
+                  <div className="px-6 md:px-0 py-3 border-t border-zinc-800">
                     <div className="h-12 bg-zinc-800 rounded w-full animate-pulse" />
                   </div>
                 }
@@ -415,6 +415,16 @@ export default async function PDPPage({
 
           {/* Q&A — loaded client-side via getReviewsQA CSR query */}
           <ReviewsQA />
+
+          {/* Link to dashboard */}
+          <div className="px-6 py-6 border-t border-zinc-800 text-center">
+            <a
+              href="/dashboard"
+              className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
+            >
+              View Critical Path Dashboard &rarr;
+            </a>
+          </div>
         </div>
       </main>
 

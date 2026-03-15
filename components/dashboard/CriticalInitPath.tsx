@@ -406,7 +406,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
   }
 
   return (
-    <div className="space-y-6 overflow-x-auto" style={{ minWidth: 0 }}>
+    <div className="space-y-6 overflow-x-hidden" style={{ minWidth: 0 }}>
       {/* Time axis + marker labels */}
       <div>
         <div className="flex justify-between text-xs text-zinc-600 font-mono">
@@ -425,7 +425,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
                   style={{ left: `${(lcpDataReady / maxMs) * 100}%` }}
                 >
                   <div className="w-px h-3 bg-blue-400" />
-                  <span className="text-[10px] text-blue-400 ml-1 font-mono whitespace-nowrap truncate max-w-[200px]">
+                  <span className="text-[10px] text-blue-400 ml-1 font-mono whitespace-nowrap truncate max-w-[140px] md:max-w-[200px]">
                     LCP data @ {lcpDataReady}ms
                   </span>
                 </div>
@@ -440,7 +440,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
                   style={{ left: `${(lcpRendered / maxMs) * 100}%` }}
                 >
                   <div className="w-px h-3 bg-green-400" />
-                  <span className="text-[10px] text-green-400 ml-1 font-mono whitespace-nowrap truncate max-w-[200px]">
+                  <span className="text-[10px] text-green-400 ml-1 font-mono whitespace-nowrap truncate max-w-[140px] md:max-w-[200px]">
                     LCP render @ {lcpRendered}ms
                     {lcpBlocked > 0 && (
                       <span className="text-amber-400"> (+{lcpBlocked}ms)</span>
@@ -458,7 +458,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
                   style={{ left: `${(hydrationMs / maxMs) * 100}%` }}
                 >
                   <div className="w-px h-3 bg-amber-400" />
-                  <span className="text-[10px] text-amber-400 ml-1 font-mono whitespace-nowrap truncate max-w-[200px]">
+                  <span className="text-[10px] text-amber-400 ml-1 font-mono whitespace-nowrap truncate max-w-[140px] md:max-w-[200px]">
                     Hydration @ {Math.round(hydrationMs)}ms
                   </span>
                 </div>
@@ -473,7 +473,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
                   style={{ left: `${(csrInitComplete / maxMs) * 100}%` }}
                 >
                   <div className="w-px h-3 bg-purple-400" />
-                  <span className="text-[10px] text-purple-400 ml-1 font-mono whitespace-nowrap truncate max-w-[200px]">
+                  <span className="text-[10px] text-purple-400 ml-1 font-mono whitespace-nowrap truncate max-w-[140px] md:max-w-[200px]">
                     Init complete @ {Math.round(csrInitComplete)}ms
                   </span>
                 </div>

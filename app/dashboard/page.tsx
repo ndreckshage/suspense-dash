@@ -53,7 +53,7 @@ export default function DashboardPage() {
         <div className="flex items-start sm:items-center justify-between gap-3">
           <div className="min-w-0">
             <h1 className="text-lg md:text-xl font-bold text-white">
-              Critical Initialization Path Dashboard
+              Critical Path Dashboard
             </h1>
             <div className="flex items-center gap-3 mt-1">
               <div className="flex items-center gap-1.5">
@@ -68,9 +68,12 @@ export default function DashboardPage() {
                     </option>
                   ))}
                 </select>
-                <span className="text-xs text-zinc-500 truncate">
+                <span className="text-xs text-zinc-500 truncate hidden sm:inline">
                   {currentPage.route} &mdash;{" "}
-                  {metrics ? `${metrics.totalPageLoads} page loads` : "loading..."}
+                  {metrics ? `${metrics.totalPageLoads} loads` : "loading..."}
+                </span>
+                <span className="text-xs text-zinc-500 truncate sm:hidden">
+                  {metrics ? `${metrics.totalPageLoads} loads` : "loading..."}
                 </span>
               </div>
             </div>
@@ -92,31 +95,31 @@ export default function DashboardPage() {
         </div>
 
         {/* Tab navigation + percentile selector */}
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800">
-          <div className="flex gap-1">
+        <div className="flex items-center justify-between gap-2 border-b border-zinc-800">
+          <div className="flex gap-1 overflow-x-auto flex-shrink min-w-0">
             <button
               onClick={() => setActiveTab("lcp")}
-              className={`px-4 py-2 text-sm transition-colors border-b-2 -mb-px ${
+              className={`px-3 py-2 text-sm whitespace-nowrap transition-colors border-b-2 -mb-px ${
                 activeTab === "lcp"
                   ? "border-blue-500 text-white"
                   : "border-transparent text-zinc-500 hover:text-zinc-300"
               }`}
             >
-              Critical Initialization Path
+              Critical Path
             </button>
             <button
               onClick={() => setActiveTab("tree")}
-              className={`px-4 py-2 text-sm transition-colors border-b-2 -mb-px ${
+              className={`px-3 py-2 text-sm whitespace-nowrap transition-colors border-b-2 -mb-px ${
                 activeTab === "tree"
                   ? "border-blue-500 text-white"
                   : "border-transparent text-zinc-500 hover:text-zinc-300"
               }`}
             >
-              Component Boundary Tree
+              Component Tree
             </button>
             <button
               onClick={() => setActiveTab("subgraphs")}
-              className={`px-4 py-2 text-sm transition-colors border-b-2 -mb-px ${
+              className={`px-3 py-2 text-sm whitespace-nowrap transition-colors border-b-2 -mb-px ${
                 activeTab === "subgraphs"
                   ? "border-blue-500 text-white"
                   : "border-transparent text-zinc-500 hover:text-zinc-300"
@@ -191,6 +194,16 @@ export default function DashboardPage() {
               pctl={pctl}
             />
           )}
+        </div>
+
+        {/* Link to PDP */}
+        <div className="text-center pt-2 pb-4">
+          <a
+            href="/products/demo-sku"
+            className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
+          >
+            View Product Page &rarr;
+          </a>
         </div>
       </div>
     </div>
