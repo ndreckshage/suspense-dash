@@ -78,7 +78,11 @@ export default async function PDPPage({
 
   // --- Layout: blocking experiment context (sequential waterfall) ---
   const layoutStart = Date.now();
-  await executeGqlQuery("getExperimentContext", "Layout", mockExperimentContext);
+  await executeGqlQuery(
+    "getExperimentContext",
+    "Layout",
+    mockExperimentContext,
+  );
   const layoutFetchEnd = Date.now();
   const layoutFetchDuration = layoutFetchEnd - layoutStart;
 
@@ -140,7 +144,7 @@ export default async function PDPPage({
         boundaryPath="Layout.Nav"
         renderCostMs={80}
         fallback={
-          <div className="bg-zinc-900 border-b border-zinc-800 px-6 py-4 h-[62px] animate-pulse" />
+          <div className="bg-zinc-900 border-b border-zinc-800 px-6 py-4 md:h-[61px] h-[53px] animate-pulse" />
         }
         render={async (ref) => {
           const data = await executeGqlQuery(
@@ -161,8 +165,8 @@ export default async function PDPPage({
             boundaryPath="Layout.Content"
             renderCostMs={2}
             fallback={
-              <div className="px-6 py-2">
-                <div className="h-4 bg-zinc-800 rounded w-64 animate-pulse" />
+              <div className="px-6 py-3">
+                <div className="h-[20] bg-zinc-800 rounded w-64 animate-pulse" />
               </div>
             }
             render={async (ref) => {
@@ -179,7 +183,7 @@ export default async function PDPPage({
                   renderCostMs={5}
                   fallback={
                     <div className="px-6 py-2">
-                      <div className="h-4 bg-zinc-800 rounded w-64 animate-pulse" />
+                      <div className="h-6 bg-zinc-800 rounded w-64 animate-pulse" />
                     </div>
                   }
                   render={async (ref) => {
@@ -200,7 +204,10 @@ export default async function PDPPage({
           <div className="flex flex-col md:flex-row md:items-start">
             {/* Left: hero image (outside Suspense for JS-disabled) + thumbnails */}
             <div className="md:w-1/2 flex-shrink-0">
-              <HeroImage imageUrl={heroData.heroImage} favoriteSlot={<FavoriteButton />} />
+              <HeroImage
+                imageUrl={heroData.heroImage}
+                favoriteSlot={<FavoriteButton />}
+              />
 
               {/* Thumbnails — own query, own boundary */}
               <TracedBoundary
@@ -237,13 +244,13 @@ export default async function PDPPage({
                 boundaryPath="Layout.Content.Main.Title"
                 renderCostMs={5}
                 fallback={
-                  <div className="px-6 md:px-0 pb-3 space-y-2">
+                  <div className="px-6 md:px-0 pb-4 space-y-2">
                     {/* Title */}
-                    <div className="h-9 bg-zinc-800 rounded w-3/4 animate-pulse mb-7" />
+                    <div className="h-9 bg-zinc-800 rounded w-3/4 animate-pulse mb-3" />
                     {/* Description */}
-                    <div className="h-4 bg-zinc-800 rounded w-full animate-pulse mb-4" />
+                    <div className="h-6 bg-zinc-800 rounded w-full animate-pulse mb-4" />
                     {/* Rating */}
-                    <div className="h-3 bg-zinc-800 rounded w-48 animate-pulse" />
+                    <div className="h-5 bg-zinc-800 rounded w-48 animate-pulse" />
                   </div>
                 }
                 render={async (ref) => {
@@ -263,9 +270,9 @@ export default async function PDPPage({
                 boundaryPath="Layout.Content.Main.Pricing"
                 renderCostMs={3}
                 fallback={
-                  <div className="px-6 md:px-0 py-2 space-y-2">
-                    <div className="h-8 bg-zinc-800 rounded w-40 animate-pulse mb-3" />
-                    <div className="h-3 bg-zinc-800 rounded w-36 animate-pulse" />
+                  <div className="px-6 md:px-0 space-y-2">
+                    <div className="h-8 bg-zinc-800 rounded w-40 animate-pulse my-3" />
+                    <div className="h-4 bg-zinc-800 rounded w-36 animate-pulse my-3" />
                   </div>
                 }
                 render={async (ref) => {
