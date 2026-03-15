@@ -29,6 +29,7 @@ import type {
   MockOperationDetail,
   WaterfallTiming,
   WaterfallCsrTiming,
+  MockLoAFEntry,
 } from "./mock-metrics";
 
 // ---- YAML schema types ----
@@ -58,13 +59,26 @@ interface YamlNavTiming {
   dom_content_loaded: PctlValue;
   load_event: PctlValue;
   tbt: PctlValue;
-  loaf_count: PctlValue;
+}
+
+interface YamlLoAFScript {
+  fn?: string;
+  file?: string;
+  duration: number;
+}
+
+interface YamlLoAFEntry {
+  start: number;
+  duration: number;
+  blocking: number;
+  scripts?: YamlLoAFScript[];
 }
 
 interface YamlPage {
   route: string;
   hydration_ms?: PctlValue;
   navigation_timing?: YamlNavTiming;
+  loaf_entries?: YamlLoAFEntry[];
   boundaries: Record<string, YamlBoundary>;
   csr_boundaries?: Record<string, YamlBoundary>;
 }
@@ -266,6 +280,7 @@ function computeWaterfall(
   pctl: number,
   hydrationMs: number,
   navTiming: NavigationTiming | null,
+  loafEntries: MockLoAFEntry[],
 ): MockWaterfallData {
   const flat = flattenTree(ssrBoundaries);
 
@@ -413,7 +428,7 @@ function computeWaterfall(
     }
   }
 
-  return { ssrTimings, csrTimings, hydrationMs, navigationTiming: navTiming };
+  return { ssrTimings, csrTimings, hydrationMs, navigationTiming: navTiming, loafEntries };
 }
 
 // ---- Tree computation ----
@@ -713,11 +728,26 @@ export function parseYamlDashboard(yamlString: string): MockDashboardData {
         domContentLoaded: Math.round(atPctl(nt.dom_content_loaded, pctl)),
         loadEvent: Math.round(atPctl(nt.load_event, pctl)),
         tbt: Math.round(atPctl(nt.tbt, pctl)),
-        loafCount: Math.round(atPctl(nt.loaf_count, pctl)),
+        loafCount: 0,
       };
     }
 
-    waterfall[pctl] = computeWaterfall(ssrRoots, csrRoots, pctl, hydrationMs, navTiming);
+    // Convert YAML LoAF entries to mock format (same entries at all percentiles)
+    const loafEntries: MockLoAFEntry[] = (doc.loaf_entries ?? []).map((e) => ({
+      startTime: e.start,
+      duration: e.duration,
+      blockingDuration: e.blocking,
+      scripts: (e.scripts ?? []).map((s) => ({
+        sourceURL: s.file ?? "",
+        sourceFunctionName: s.fn ?? "",
+        duration: s.duration,
+      })),
+    }));
+
+    // Derive loafCount from entries
+    if (navTiming) navTiming.loafCount = loafEntries.length;
+
+    waterfall[pctl] = computeWaterfall(ssrRoots, csrRoots, pctl, hydrationMs, navTiming, loafEntries);
     tree[pctl] = computeTree(ssrRoots, csrRoots, pctl);
     subgraphs[pctl] = computeSubgraphs(ssrRoots, csrRoots, pctl);
   }

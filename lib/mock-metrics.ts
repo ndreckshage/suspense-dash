@@ -30,11 +30,19 @@ export interface WaterfallCsrTiming {
   queryName: string;
 }
 
+export interface MockLoAFEntry {
+  startTime: number;
+  duration: number;
+  blockingDuration: number;
+  scripts: { sourceURL: string; sourceFunctionName: string; duration: number }[];
+}
+
 export interface MockWaterfallData {
   ssrTimings: WaterfallTiming[];
   csrTimings: WaterfallCsrTiming[];
   hydrationMs: number;
   navigationTiming: NavigationTiming | null;
+  loafEntries: MockLoAFEntry[];
 }
 
 // ---- Tree (BoundaryTreeTable) ----

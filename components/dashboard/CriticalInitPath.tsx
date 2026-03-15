@@ -168,9 +168,9 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
     return hydrationTimes[representativeRequestId] ?? 0;
   }, [hydrationTimes, representativeRequestId, pctl, mock]);
 
-  // LoAF entries — from representative load
+  // LoAF entries — from mock or representative load
   const aggregatedLoaf = useMemo(() => {
-    if (mock?.[pctl]) return []; // LoAF not in YAML mock data
+    if (mock?.[pctl]) return mock[pctl].loafEntries ?? [];
     if (!loafEntries || !representativeRequestId) return [];
     return loafEntries[representativeRequestId] ?? [];
   }, [loafEntries, representativeRequestId, pctl, mock]);

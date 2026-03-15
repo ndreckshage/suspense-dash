@@ -18,7 +18,26 @@ navigation_timing:
   dom_content_loaded: { p50: 110, p75: 130, p90: 155, p99: 185 }
   load_event: { p50: 300, p75: 350, p90: 400, p99: 480 }
   tbt: { p50: 25, p75: 35, p90: 45, p99: 65 }
-  loaf_count: { p50: 1, p75: 2, p90: 3, p99: 4 }
+
+# Long Animation Frames — placed on the waterfall timeline
+# start/duration/blocking in ms, scripts optional
+loaf_entries:
+  - start: 155
+    duration: 90
+    blocking: 58
+    scripts:
+      - { fn: "hydrateRoot", file: "react-dom.js", duration: 52 }
+      - { fn: "initAnalytics", file: "analytics.js", duration: 18 }
+  - start: 270
+    duration: 65
+    blocking: 32
+    scripts:
+      - { fn: "onVisible", file: "intersection-observer.js", duration: 30 }
+  - start: 420
+    duration: 55
+    blocking: 20
+    scripts:
+      - { fn: "recoCarousel", file: "carousel.js", duration: 18 }
 
 boundaries:
   Layout:
