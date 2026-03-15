@@ -429,7 +429,7 @@ export default async function PDPPage({
               href="/dashboard"
               className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
             >
-              View Critical Path Dashboard &rarr;
+              View Suspense Dash &rarr;
             </a>
           </div>
         </div>

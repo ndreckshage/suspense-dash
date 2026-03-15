@@ -5,11 +5,11 @@ export default function Home() {
     <div className="flex min-h-screen items-center justify-center">
       <div className="text-center space-y-6">
         <h1 className="text-2xl font-bold text-white">
-          Critical Path Dashboard
+          Suspense Dash
         </h1>
         <p className="text-zinc-400 max-w-md">
-          Instrumented mock ecommerce PDP with per-boundary render/fetch metrics
-          and a tree-structured dashboard.
+          Visualize React Suspense boundaries, streaming SSR waterfalls,
+          and per-component render/fetch metrics.
         </p>
         <div className="flex gap-4 justify-center">
           <Link

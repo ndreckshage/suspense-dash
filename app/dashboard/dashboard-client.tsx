@@ -93,7 +93,7 @@ export function DashboardClient({ initialTab }: { initialTab: TabKey }) {
         <div className="flex items-start sm:items-center justify-between gap-3">
           <div className="min-w-0">
             <h1 className="text-base md:text-xl font-bold text-white">
-              Critical Path Dash
+              Suspense Dash
             </h1>
             <div className="flex items-center gap-2 mt-3">
               <select
@@ -158,7 +158,7 @@ export function DashboardClient({ initialTab }: { initialTab: TabKey }) {
                 : "border-transparent text-zinc-500 hover:text-zinc-300"
             }`}
           >
-            Critical Path
+            Suspense Path
           </button>
           <button
             onClick={() => setActiveTab("tree")}

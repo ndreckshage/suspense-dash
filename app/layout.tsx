@@ -13,7 +13,7 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Suspense Boundary Monitor - PDP Demo",
+  title: "Suspense Dash",
   description:
     "Instrumented mock ecommerce PDP with suspense boundary performance monitoring",
 };
