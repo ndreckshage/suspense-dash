@@ -406,8 +406,8 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
   }
 
   return (
-    <div className="space-y-6 overflow-x-auto md:overflow-x-hidden" style={{ minWidth: 0 }}>
-      <div className="min-w-[600px] md:min-w-0 space-y-6">
+    <div className="space-y-6 overflow-x-auto overflow-y-hidden md:overflow-x-hidden" style={{ minWidth: 0 }}>
+      <div className="min-w-[600px] md:min-w-0 space-y-6 overflow-hidden">
       {/* Time axis + marker labels */}
       <div>
         <div className="flex justify-between text-xs text-zinc-600 font-mono">
@@ -417,7 +417,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
           <span>{Math.round((maxMs * 3) / 4)}ms</span>
           <span>{maxMs}ms</span>
         </div>
-        <div className="mt-1 space-y-0">
+        <div className="mt-1 space-y-0 overflow-hidden">
           {lcpDataReady > 0 && (
             <Tooltip content={`LCP data ready at ${lcpDataReady}ms — all data for the LCP boundary has been fetched`}>
               <div className="relative h-4">

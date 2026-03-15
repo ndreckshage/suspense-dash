@@ -1,7 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect, useCallback } from "react";
-import { useSearchParams, useRouter, usePathname } from "next/navigation";
+import { useState, useEffect, useCallback } from "react";
 import { BoundaryTreeTable } from "@/components/dashboard/BoundaryTreeTable";
 import { CriticalInitPath } from "@/components/dashboard/CriticalInitPath";
 import { SubgraphCallsTab } from "@/components/dashboard/SubgraphCallsTab";
@@ -19,51 +18,37 @@ const PAGE_TYPES = [
   { value: "checkout", label: "Checkout", route: "/checkout", enabled: false },
 ] as const;
 
-export default function DashboardPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen bg-zinc-950 text-zinc-100 px-4 py-8 md:px-6 md:py-12 font-mono">
-          <div className="max-w-7xl mx-auto">
-            <div className="text-center py-12 text-zinc-500 animate-pulse">Loading dashboard...</div>
-          </div>
-        </div>
-      }
-    >
-      <DashboardContent />
-    </Suspense>
-  );
+function getTabFromUrl(): TabKey {
+  if (typeof window === "undefined") return "lcp";
+  const params = new URLSearchParams(window.location.search);
+  const tab = params.get("tab");
+  return TAB_KEYS.includes(tab as TabKey) ? (tab as TabKey) : "lcp";
 }
 
-function DashboardContent() {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const pathname = usePathname();
-
+export default function DashboardPage() {
   const [metrics, setMetrics] = useState<ClientMetrics | null>(null);
+  const [activeTab, setActiveTabState] = useState<TabKey>(getTabFromUrl);
   const [loading, setLoading] = useState(true);
   const [pctl, setPctl] = useState<number>(99);
   const [pageType, setPageType] = useState("pdp");
 
-  // Read active tab from URL, default to "lcp"
-  const tabParam = searchParams.get("tab");
-  const activeTab: TabKey = TAB_KEYS.includes(tabParam as TabKey)
-    ? (tabParam as TabKey)
-    : "lcp";
+  const setActiveTab = useCallback((tab: TabKey) => {
+    setActiveTabState(tab);
+    const url = new URL(window.location.href);
+    if (tab === "lcp") {
+      url.searchParams.delete("tab");
+    } else {
+      url.searchParams.set("tab", tab);
+    }
+    window.history.replaceState({}, "", url.toString());
+  }, []);
 
-  const setActiveTab = useCallback(
-    (tab: TabKey) => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (tab === "lcp") {
-        params.delete("tab");
-      } else {
-        params.set("tab", tab);
-      }
-      const qs = params.toString();
-      router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
-    },
-    [searchParams, router, pathname],
-  );
+  // Sync tab state on browser back/forward
+  useEffect(() => {
+    const onPopState = () => setActiveTabState(getTabFromUrl());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
 
   const currentPage = PAGE_TYPES.find((p) => p.value === pageType) ?? PAGE_TYPES[0];
 
@@ -147,7 +132,7 @@ function DashboardContent() {
         </div>
 
         {/* Tab navigation — own row, horizontal only */}
-        <div className="flex gap-1 overflow-x-auto border-b border-zinc-800">
+        <div className="flex gap-1 overflow-x-auto overflow-y-hidden border-b border-zinc-800">
           <button
             onClick={() => setActiveTab("lcp")}
             className={`px-3 py-2 text-sm whitespace-nowrap transition-colors border-b-2 -mb-px ${
