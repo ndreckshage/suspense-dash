@@ -1,12 +1,14 @@
-# Suspense Dash
+# Suspense Dash (Prototype)
 
-A Next.js 16 performance monitoring dashboard that instruments React Server Component rendering at the Suspense boundary level. Built to understand and optimize the rendering behavior of ecommerce product pages (PDPs) using a federated GraphQL architecture.
+A prototype dashboard for visualizing React Server Component rendering performance at the Suspense boundary level. Uses a simulated ecommerce PDP with a federated GraphQL backend — all self-contained, no external dependencies.
+
+**This is a proof-of-concept**, not production software. The PDP, GraphQL backend, and metrics are all simulated. The goal is to demonstrate an instrumentation and visualization approach that could be adapted to real applications.
 
 ## What This Is
 
-This project answers a question that's hard to answer with traditional APM tools like Datadog: **where in the React component tree is rendering time actually spent, and why?**
+Traditional APM tools like Datadog show you that a request was slow, but not **where in the React component tree** the time was spent. This prototype explores that gap.
 
-It instruments a realistic ecommerce PDP with 14 Suspense boundaries, simulates a federated GraphQL backend with 9 subgraphs, and collects granular metrics that break down each boundary's performance into:
+It instruments a mock ecommerce PDP with 14 Suspense boundaries, simulates a federated GraphQL backend with 9 subgraphs, and collects granular metrics that break down each boundary's performance into:
 
 - **Fetch duration** — async I/O time (non-blocking, can overlap with other boundaries)
 - **Render cost** — synchronous CPU time (blocks the Node.js thread)
@@ -82,6 +84,7 @@ Layout
 ```
 
 Each boundary is wrapped in `TracedBoundary`, which measures:
+
 1. When the boundary started executing (wall clock offset from request start)
 2. How long the async fetch took (I/O)
 3. How long sync rendering took (CPU, via `busyWait`)
@@ -91,17 +94,17 @@ Each boundary is wrapped in `TracedBoundary`, which measures:
 
 Simulates 9 backend subgraphs with realistic latency distributions:
 
-| Subgraph | Base Latency | Notes |
-|----------|-------------|-------|
-| product | 45ms | Core product data |
-| pricing | 350ms | Slowest — pricing + inventory + reviews summary |
-| inventory | 40ms | Availability checks |
-| reviews | 50–350ms | Wide range by operation |
-| cms | 40–90ms | Navigation, breadcrumbs |
-| reco | 180ms | Recommendation engine |
-| experimentation | 30ms | A/B test context |
-| media | 35–50ms | Image/thumbnail URLs |
-| user | 60–80ms | Cart (CSR only) |
+| Subgraph        | Base Latency | Notes                                           |
+| --------------- | ------------ | ----------------------------------------------- |
+| product         | 45ms         | Core product data                               |
+| pricing         | 350ms        | Slowest — pricing + inventory + reviews summary |
+| inventory       | 40ms         | Availability checks                             |
+| reviews         | 50–350ms     | Wide range by operation                         |
+| cms             | 40–90ms      | Navigation, breadcrumbs                         |
+| reco            | 180ms        | Recommendation engine                           |
+| experimentation | 30ms         | A/B test context                                |
+| media           | 35–50ms      | Image/thumbnail URLs                            |
+| user            | 60–80ms      | Cart (CSR only)                                 |
 
 Latency follows a realistic tail distribution: 85% tight cluster, 11% moderately slow (1.3–1.8×), 3.5% slow (2–3×), 0.5% extreme tail (3–5×, simulating GC pauses or cold starts).
 
@@ -152,20 +155,20 @@ Toggle via the "Slow" button in the PDP nav bar (or add `?slow=1` to the URL). M
 
 ## Key Files
 
-| File | Purpose |
-|------|---------|
-| `app/products/[sku]/page.tsx` | PDP with 14 traced Suspense boundaries |
-| `app/dashboard/page.tsx` | Metrics dashboard (client component) |
-| `components/TracedBoundary.tsx` | Core instrumentation wrapper |
-| `components/MetricsEmbed.tsx` | Server → client metrics transport |
-| `components/MetricsCollector.tsx` | Client-side metrics ingestion |
-| `lib/metrics-store.ts` | Metric types + server-side store |
-| `lib/client-metrics-store.ts` | Client localStorage store + seed logic |
-| `lib/gql-federation.ts` | Subgraph & query definitions |
-| `lib/gql-query.ts` | Query execution + dedup via cache() |
-| `lib/busy-wait.ts` | Sync thread-blocking simulation |
-| `components/dashboard/*` | Dashboard tab components |
-| `components/pdp/*` | PDP UI components |
+| File                              | Purpose                                |
+| --------------------------------- | -------------------------------------- |
+| `app/products/[sku]/page.tsx`     | PDP with 14 traced Suspense boundaries |
+| `app/dashboard/page.tsx`          | Metrics dashboard (client component)   |
+| `components/TracedBoundary.tsx`   | Core instrumentation wrapper           |
+| `components/MetricsEmbed.tsx`     | Server → client metrics transport      |
+| `components/MetricsCollector.tsx` | Client-side metrics ingestion          |
+| `lib/metrics-store.ts`            | Metric types + server-side store       |
+| `lib/client-metrics-store.ts`     | Client localStorage store + seed logic |
+| `lib/gql-federation.ts`           | Subgraph & query definitions           |
+| `lib/gql-query.ts`                | Query execution + dedup via cache()    |
+| `lib/busy-wait.ts`                | Sync thread-blocking simulation        |
+| `components/dashboard/*`          | Dashboard tab components               |
+| `components/pdp/*`                | PDP UI components                      |
 
 ## Production Path
 
@@ -181,21 +184,25 @@ See the [Production Integration](#production-integration) discussion below for a
 ### Production Integration
 
 **Writing metrics to Datadog:**
+
 - Use `dd-trace` or the Datadog API to emit custom metrics from `TracedBoundary` (boundary timing, query durations, subgraph latencies)
 - Tag metrics with boundary path, query name, subgraph, request ID, and page type
 - Emit as distributions (not gauges) to get server-side percentile aggregation
 
 **Reading metrics back for this dashboard:**
+
 - Datadog Metrics Query API (`/api/v1/query`) supports percentile queries on distribution metrics
 - Datadog APM has a Trace Search API for span-level data (boundary execution details)
 - Rate limits are generous for internal dashboards (~300 req/min for metrics queries)
 
 **BigQuery alternative:**
+
 - Stream boundary metrics to GBQ via a lightweight collector (pub/sub or direct insert)
 - Dashboard queries GBQ directly — better for custom aggregations and historical analysis
 - Lower cost for high-cardinality data (per-boundary, per-request granularity)
 
 **Hybrid approach (recommended):**
+
 - Write to Datadog for alerting, on-call dashboards, and correlation with existing APM
 - Write to GBQ for this custom dashboard's detailed analysis (waterfall, tree, dedup visualization)
 - Use Datadog for "is rendering slow?" and this dashboard for "why is rendering slow?"
