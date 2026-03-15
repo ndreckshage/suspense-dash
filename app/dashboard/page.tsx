@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { Suspense, useState, useEffect, useCallback } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { BoundaryTreeTable } from "@/components/dashboard/BoundaryTreeTable";
 import { CriticalInitPath } from "@/components/dashboard/CriticalInitPath";
@@ -20,6 +20,22 @@ const PAGE_TYPES = [
 ] as const;
 
 export default function DashboardPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-zinc-950 text-zinc-100 px-4 py-8 md:px-6 md:py-12 font-mono">
+          <div className="max-w-7xl mx-auto">
+            <div className="text-center py-12 text-zinc-500 animate-pulse">Loading dashboard...</div>
+          </div>
+        </div>
+      }
+    >
+      <DashboardContent />
+    </Suspense>
+  );
+}
+
+function DashboardContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
