@@ -423,7 +423,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
               <div className="relative h-4">
                 <div
                   className="absolute top-0 flex items-center"
-                  style={{ left: `${(lcpDataReady / maxMs) * 100}%` }}
+                  style={{ left: `calc(${(lcpDataReady / maxMs) * 100}% + 13px)` }}
                 >
                   <div className="w-px h-3 bg-blue-400" />
                   <span className="text-[10px] text-blue-400 ml-1 font-mono whitespace-nowrap truncate max-w-[140px] md:max-w-[200px]">
@@ -438,7 +438,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
               <div className="relative h-4">
                 <div
                   className="absolute top-0 flex items-center"
-                  style={{ left: `${(lcpRendered / maxMs) * 100}%` }}
+                  style={{ left: `calc(${(lcpRendered / maxMs) * 100}% + 13px)` }}
                 >
                   <div className="w-px h-3 bg-green-400" />
                   <span className="text-[10px] text-green-400 ml-1 font-mono whitespace-nowrap truncate max-w-[140px] md:max-w-[200px]">
@@ -456,7 +456,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
               <div className="relative h-4">
                 <div
                   className="absolute top-0 flex items-center"
-                  style={{ left: `${(hydrationMs / maxMs) * 100}%` }}
+                  style={{ left: `calc(${(hydrationMs / maxMs) * 100}% + 13px)` }}
                 >
                   <div className="w-px h-3 bg-amber-400" />
                   <span className="text-[10px] text-amber-400 ml-1 font-mono whitespace-nowrap truncate max-w-[140px] md:max-w-[200px]">
@@ -471,7 +471,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
               <div className="relative h-4">
                 <div
                   className="absolute top-0 flex items-center"
-                  style={{ left: `${(csrInitComplete / maxMs) * 100}%` }}
+                  style={{ left: `calc(${(csrInitComplete / maxMs) * 100}% + 13px)` }}
                 >
                   <div className="w-px h-3 bg-purple-400" />
                   <span className="text-[10px] text-purple-400 ml-1 font-mono whitespace-nowrap truncate max-w-[140px] md:max-w-[200px]">

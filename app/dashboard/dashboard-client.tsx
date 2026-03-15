@@ -92,9 +92,17 @@ export function DashboardClient({ initialTab }: { initialTab: TabKey }) {
         {/* Header */}
         <div className="flex items-start sm:items-center justify-between gap-3">
           <div className="min-w-0">
-            <h1 className="text-base md:text-xl font-bold text-white">
-              Suspense Dash
-            </h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-base md:text-xl font-bold text-white">
+                Suspense Dash
+              </h1>
+              <a
+                href="/products/demo-sku"
+                className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+              >
+                View Demo
+              </a>
+            </div>
             <div className="flex items-center gap-2 mt-3">
               <select
                 value={pageType}
@@ -243,7 +251,7 @@ export function DashboardClient({ initialTab }: { initialTab: TabKey }) {
             href="/products/demo-sku"
             className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
           >
-            View Product Page &rarr;
+            View Demo &rarr;
           </a>
         </div>
       </div>
