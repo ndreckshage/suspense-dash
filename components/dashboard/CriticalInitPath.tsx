@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState, useRef, useCallback, type ReactNode } from "react";
+import { useMemo, useState, useCallback, type ReactNode } from "react";
 import type { BoundaryMetric, QueryMetric } from "@/lib/metrics-store";
 import type { LoAFEntry, NavigationTiming } from "@/lib/client-metrics-store";
-import { percentile } from "@/lib/percentile";
+import type { MockWaterfallData } from "@/lib/mock-metrics";
 
 function Tooltip({ content, children, className, style }: { content: ReactNode; children: ReactNode; className?: string; style?: React.CSSProperties }) {
   const [show, setShow] = useState(false);
@@ -73,6 +73,8 @@ interface Props {
   hydrationTimes?: Record<string, number>;
   loafEntries?: Record<string, LoAFEntry[]>;
   navigationTimings?: Record<string, NavigationTiming>;
+  /** Pre-computed mock data keyed by percentile (bypasses live aggregation) */
+  mock?: Record<number, MockWaterfallData>;
 }
 
 interface BoundaryTiming {
@@ -109,14 +111,7 @@ const BOUNDARY_COLORS: Record<string, string> = {
   ReviewsQA: "rgb(34, 197, 94)",
 };
 
-function median(values: number[]): number {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-}
-
-export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, loafEntries, navigationTimings }: Props) {
+export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, loafEntries, navigationTimings, mock }: Props) {
   // Separate SSR and CSR metrics
   const ssrBoundaries = useMemo(
     () => boundaries.filter((b) => b.phase !== "csr"),
@@ -135,132 +130,126 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
     [queries],
   );
 
-  // Compute hydration time across page loads at selected percentile
-  const hydrationMs = useMemo(() => {
-    if (!hydrationTimes) return 0;
-    const values = Object.values(hydrationTimes);
-    if (values.length === 0) return 0;
-    return percentile(values, pctl);
-  }, [hydrationTimes, pctl]);
+  // Pick a representative page load at the selected experience percentile.
+  // Instead of computing percentile per-boundary independently (which creates
+  // a Frankenstein load where everything is at its worst simultaneously),
+  // we rank actual page loads by total time and pick a coherent one.
+  const representativeRequestId = useMemo(() => {
+    if (mock?.[pctl]) return null; // mock mode — no need for representative load
+    if (ssrBoundaries.length === 0) return null;
 
-  // Pick a representative page load's LoAF entries at the selected percentile
-  // We rank page loads by total blocking time and pick the one at pctl
-  const aggregatedLoaf = useMemo(() => {
-    if (!loafEntries) return [];
-    const pageLoads = Object.entries(loafEntries).filter(([, entries]) => entries.length > 0);
-    if (pageLoads.length === 0) return [];
+    const byRequest = new Map<string, BoundaryMetric[]>();
+    for (const b of ssrBoundaries) {
+      const list = byRequest.get(b.requestId) ?? [];
+      list.push(b);
+      byRequest.set(b.requestId, list);
+    }
 
-    // Rank page loads by total blocking time, pick the one at the selected percentile
-    const ranked = pageLoads
-      .map(([id, entries]) => ({
-        id,
-        entries,
-        totalBlocking: entries.reduce((sum, e) => sum + e.blockingDuration, 0),
-      }))
-      .sort((a, b) => a.totalBlocking - b.totalBlocking);
+    const loadTimes: { requestId: string; pageTime: number }[] = [];
+    for (const [requestId, metrics] of byRequest) {
+      const pageTime = Math.max(
+        ...metrics.map((m) => m.wall_start_ms + m.render_duration_ms),
+      );
+      loadTimes.push({ requestId, pageTime });
+    }
+    loadTimes.sort((a, b) => a.pageTime - b.pageTime);
 
     const idx = Math.min(
-      Math.ceil((pctl / 100) * ranked.length) - 1,
-      ranked.length - 1,
+      Math.max(0, Math.ceil((pctl / 100) * loadTimes.length) - 1),
+      loadTimes.length - 1,
     );
-    return ranked[Math.max(0, idx)].entries;
-  }, [loafEntries, pctl]);
+    return loadTimes[idx]?.requestId ?? null;
+  }, [ssrBoundaries, pctl, mock]);
 
-  // Aggregate navigation timing across page loads at selected percentile
+  // Hydration time — from mock or representative load
+  const hydrationMs = useMemo(() => {
+    if (mock?.[pctl]) return mock[pctl].hydrationMs ?? 0;
+    if (!hydrationTimes || !representativeRequestId) return 0;
+    return hydrationTimes[representativeRequestId] ?? 0;
+  }, [hydrationTimes, representativeRequestId, pctl, mock]);
+
+  // LoAF entries — from mock or representative load
+  const aggregatedLoaf = useMemo(() => {
+    if (mock?.[pctl]) return mock[pctl].loafEntries ?? [];
+    if (!loafEntries || !representativeRequestId) return [];
+    return loafEntries[representativeRequestId] ?? [];
+  }, [loafEntries, representativeRequestId, pctl, mock]);
+
+  // Navigation timing — from mock or representative load
   const navTiming = useMemo(() => {
-    if (!navigationTimings) return null;
-    const values = Object.values(navigationTimings);
-    if (values.length === 0) return null;
-    return {
-      domInteractive: percentile(values.map((t) => t.domInteractive), pctl),
-      domContentLoaded: percentile(values.map((t) => t.domContentLoaded), pctl),
-      loadEvent: percentile(values.map((t) => t.loadEvent), pctl),
-      tbt: percentile(values.map((t) => t.tbt), pctl),
-      loafCount: percentile(values.map((t) => t.loafCount), pctl),
-    };
-  }, [navigationTimings, pctl]);
+    if (mock?.[pctl]) return mock[pctl].navigationTiming ?? null;
+    if (!navigationTimings || !representativeRequestId) return null;
+    return navigationTimings[representativeRequestId] ?? null;
+  }, [navigationTimings, representativeRequestId, pctl, mock]);
 
   const { timings, lcpDataReady, lcpRendered, lcpBlocked, shellEnd } =
     useMemo(() => {
-      if (ssrBoundaries.length === 0) {
-        return {
-          timings: [],
-          maxMs: 1,
-          lcpDataReady: 0,
-          lcpRendered: 0,
-          lcpBlocked: 0,
-          shellEnd: 0,
-        };
-      }
+      const emptyResult = {
+        timings: [] as BoundaryTiming[],
+        lcpDataReady: 0,
+        lcpRendered: 0,
+        lcpBlocked: 0,
+        shellEnd: 0,
+      };
 
-      const byPath = new Map<string, BoundaryMetric[]>();
-      for (const b of ssrBoundaries) {
-        const list = byPath.get(b.boundary_path) ?? [];
-        list.push(b);
-        byPath.set(b.boundary_path, list);
-      }
+      // Mock data path — use pre-computed timings
+      const mockData = mock?.[pctl];
+      let rawTimings: BoundaryTiming[] | null = mockData
+        ? mockData.ssrTimings.map((t) => ({ ...t }))
+        : null;
 
-      // Group queries by boundary_path — pick first queryName per boundary
-      const queryNameByPath = new Map<string, string>();
-      const queryByKey = new Map<string, QueryMetric[]>();
-      for (const q of ssrQueries) {
-        if (!queryNameByPath.has(q.boundary_path)) {
-          queryNameByPath.set(q.boundary_path, q.queryName);
-        }
-        const key = `${q.boundary_path}:${q.queryName}`;
-        const list = queryByKey.get(key) ?? [];
-        list.push(q);
-        queryByKey.set(key, list);
-      }
+      // Live data path — build from representative load
+      if (!rawTimings) {
+        if (!representativeRequestId) return emptyResult;
 
-      // Order boundaries by median wall_start_ms
-      const boundaryOrder = [...byPath.keys()].sort((a, b) => {
-        const aMedian = median(byPath.get(a)!.map((m) => m.wall_start_ms));
-        const bMedian = median(byPath.get(b)!.map((m) => m.wall_start_ms));
-        return aMedian - bMedian;
-      });
-
-      const timings: BoundaryTiming[] = [];
-
-      for (const path of boundaryOrder) {
-        const metrics = byPath.get(path)!;
-        const name = path.split(".").pop()!;
-        const wallStart = percentile(
-          metrics.map((m) => m.wall_start_ms),
-          pctl,
+        const repBoundaries = ssrBoundaries.filter(
+          (b) => b.requestId === representativeRequestId,
         );
-        const queryName = queryNameByPath.get(path) ?? "";
+        const repQueries = ssrQueries.filter(
+          (q) => q.requestId === representativeRequestId,
+        );
+        if (repBoundaries.length === 0) return emptyResult;
 
-        // Use real recorded fetch durations
-        const fetchDurations = metrics.map((m) => m.fetch_duration_ms ?? m.render_duration_ms);
-        const realFetch = percentile(fetchDurations, pctl);
+        const queryNameByPath = new Map<string, string>();
+        const queryByKey = new Map<string, QueryMetric[]>();
+        for (const q of repQueries) {
+          if (!queryNameByPath.has(q.boundary_path)) {
+            queryNameByPath.set(q.boundary_path, q.queryName);
+          }
+          const key = `${q.boundary_path}:${q.queryName}`;
+          const list = queryByKey.get(key) ?? [];
+          list.push(q);
+          queryByKey.set(key, list);
+        }
 
-        // Get query metrics for cache detection
-        const qKey = `${path}:${queryName}`;
-        const qMetrics = queryByKey.get(qKey) ?? [];
-        const isCached =
-          qMetrics.length > 0 && qMetrics.every((m) => m.fullyCached);
-        const fetchDuration = isCached ? 0 : realFetch;
+        rawTimings = repBoundaries
+          .sort((a, b) => a.wall_start_ms - b.wall_start_ms)
+          .map((m) => {
+            const name = m.boundary_path.split(".").pop()!;
+            const queryName = queryNameByPath.get(m.boundary_path) ?? "";
+            const qKey = `${m.boundary_path}:${queryName}`;
+            const qMetrics = queryByKey.get(qKey) ?? [];
+            const isCached =
+              qMetrics.length > 0 && qMetrics.every((q) => q.fullyCached);
 
-        timings.push({
-          name,
-          boundaryPath: path,
-          wallStart,
-          fetchDuration,
-          renderCost: percentile(
-            metrics.map((m) => m.render_cost_ms ?? 0),
-            pctl,
-          ),
-          blocked: 0,
-          total: percentile(
-            metrics.map((m) => m.render_duration_ms),
-            pctl,
-          ),
-          lcpCritical: metrics.some((m) => m.is_lcp_critical),
-          queryName,
-          cached: isCached,
-        });
+            return {
+              name,
+              boundaryPath: m.boundary_path,
+              wallStart: m.wall_start_ms,
+              fetchDuration: isCached
+                ? 0
+                : (m.fetch_duration_ms ?? m.render_duration_ms),
+              renderCost: m.render_cost_ms ?? 0,
+              blocked: 0,
+              total: m.render_duration_ms,
+              lcpCritical: m.is_lcp_critical,
+              queryName,
+              cached: isCached,
+            };
+          });
       }
+
+      const timings = rawTimings!;
 
       // Thread simulation for blocked_ms
       const sortedByFetchEnd = [...timings]
@@ -305,50 +294,40 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
         lcpBlocked,
         shellEnd,
       };
-    }, [ssrBoundaries, ssrQueries, pctl]);
+    }, [ssrBoundaries, ssrQueries, representativeRequestId, pctl, mock]);
 
   // Compute CSR query timings for visualization
   const csrTimings = useMemo(() => {
-    if (csrBoundaries.length === 0) return [];
+    // Mock data path
+    if (mock?.[pctl]?.csrTimings) return mock[pctl].csrTimings;
 
-    const byPath = new Map<string, BoundaryMetric[]>();
-    for (const b of csrBoundaries) {
-      const list = byPath.get(b.boundary_path) ?? [];
-      list.push(b);
-      byPath.set(b.boundary_path, list);
-    }
+    if (csrBoundaries.length === 0 || !representativeRequestId) return [];
+
+    // Filter to representative load
+    const repCsr = csrBoundaries.filter(
+      (b) => b.requestId === representativeRequestId,
+    );
+    const repCsrQueries = csrQueries.filter(
+      (q) => q.requestId === representativeRequestId,
+    );
 
     const queryNameByPath = new Map<string, string>();
-    for (const q of csrQueries) {
+    for (const q of repCsrQueries) {
       if (!queryNameByPath.has(q.boundary_path)) {
         queryNameByPath.set(q.boundary_path, q.queryName);
       }
     }
 
-    return [...byPath.keys()]
-      .sort((a, b) => {
-        const aMedian = median(byPath.get(a)!.map((m) => m.wall_start_ms));
-        const bMedian = median(byPath.get(b)!.map((m) => m.wall_start_ms));
-        return aMedian - bMedian;
-      })
-      .map((path) => {
-        const metrics = byPath.get(path)!;
-        const name = path.split(".").pop()!;
-        return {
-          name,
-          boundaryPath: path,
-          wallStart: percentile(
-            metrics.map((m) => m.wall_start_ms),
-            pctl,
-          ),
-          fetchDuration: percentile(
-            metrics.map((m) => m.fetch_duration_ms ?? m.render_duration_ms),
-            pctl,
-          ),
-          queryName: queryNameByPath.get(path) ?? "",
-        };
-      });
-  }, [csrBoundaries, csrQueries, pctl]);
+    return repCsr
+      .sort((a, b) => a.wall_start_ms - b.wall_start_ms)
+      .map((m) => ({
+        name: m.boundary_path.split(".").pop()!,
+        boundaryPath: m.boundary_path,
+        wallStart: m.wall_start_ms,
+        fetchDuration: m.fetch_duration_ms ?? m.render_duration_ms,
+        queryName: queryNameByPath.get(m.boundary_path) ?? "",
+      }));
+  }, [csrBoundaries, csrQueries, representativeRequestId, pctl, mock]);
 
   // CSR init complete time (latest CSR query end)
   const csrInitComplete = useMemo(() => {

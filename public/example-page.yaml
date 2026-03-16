@@ -1,0 +1,175 @@
+# Example PDP page — with per-percentile timing profiles
+# Import this file into the dashboard via "Import YAML" to visualize.
+#
+# Values can be:
+#   - A plain number (same at all percentiles)
+#   - A map like { p50: 30, p90: 45, p99: 80 } for per-percentile values
+#     (missing percentiles interpolate from nearest lower or fall back to p50)
+#
+# The waterfall "fudges" fetch times: only the highest-variance boundary
+# uses the experience percentile; others stay near p50. Tree and subgraph
+# views show real per-metric percentile values.
+
+route: /products/[sku]
+
+hydration_ms: { p50: 120, p75: 145, p90: 170, p99: 210 }
+navigation_timing:
+  dom_interactive: { p50: 90, p75: 105, p90: 120, p99: 150 }
+  dom_content_loaded: { p50: 110, p75: 130, p90: 155, p99: 185 }
+  load_event: { p50: 300, p75: 350, p90: 400, p99: 480 }
+  tbt: { p50: 25, p75: 35, p90: 45, p99: 65 }
+
+# Long Animation Frames — placed on the waterfall timeline
+# start/duration/blocking in ms, scripts optional
+loaf_entries:
+  - start: 155
+    duration: 90
+    blocking: 58
+    scripts:
+      - { fn: "hydrateRoot", file: "react-dom.js", duration: 52 }
+      - { fn: "initAnalytics", file: "analytics.js", duration: 18 }
+  - start: 270
+    duration: 65
+    blocking: 32
+    scripts:
+      - { fn: "onVisible", file: "intersection-observer.js", duration: 30 }
+  - start: 420
+    duration: 55
+    blocking: 20
+    scripts:
+      - { fn: "recoCarousel", file: "carousel.js", duration: 18 }
+
+boundaries:
+  Layout:
+    render_cost: 6
+    lcp_critical: true
+    queries:
+      getExperimentContext:
+        ops:
+          experiment.context: { p50: 28, p90: 35, p99: 50 }
+
+    Nav:
+      render_cost: 3
+      queries:
+        getNavigation:
+          ops:
+            cms.navigation: { p50: 55, p90: 80, p99: 120 }
+
+    Content:
+      render_cost: 2
+      queries:
+        getContentLayout:
+          ops:
+            cms.layout: { p50: 40, p90: 60, p99: 85 }
+
+      Breadcrumbs:
+        render_cost: 2
+        queries:
+          getBreadcrumbs:
+            ops:
+              category.tree: { p50: 35, p90: 50, p99: 75 }
+
+      Main.Hero:
+        render_cost: 4
+        lcp_critical: true
+        queries:
+          getHeroImage:
+            ops:
+              media.heroImage: { p50: 30, p90: 38, p99: 55 }
+
+      Main.Thumbnails:
+        render_cost: 3
+        queries:
+          getThumbnails:
+            ops:
+              media.thumbnails: { p50: 40, p90: 55, p99: 70 }
+
+      Main.Title:
+        render_cost: 6
+        lcp_critical: true
+        queries:
+          getProductInfo:
+            ops:
+              product.core: { p50: 25, p90: 35, p99: 50 }
+              product.bullets: { p50: 30, p90: 45, p99: 65 }
+
+      Main.Pricing:
+        render_cost: 8
+        queries:
+          getProductPricing:
+            ops:
+              pricing.current: { p50: 200, p90: 350, p99: 680 }
+              inventory.availability: { p50: 30, p90: 42, p99: 60 }
+              reviews.summary: { p50: 35, p90: 50, p99: 70 }
+
+      Main.Bullets:
+        render_cost: 3
+        queries:
+          getProductInfo:
+            ops:
+              product.core:
+                duration: { p50: 25, p90: 35, p99: 50 }
+                cached: true
+              product.bullets:
+                duration: { p50: 30, p90: 45, p99: 65 }
+                cached: true
+
+      Main.Options:
+        render_cost: 2
+        queries:
+          getProductInfo:
+            ops:
+              product.core:
+                duration: { p50: 25, p90: 35, p99: 50 }
+                cached: true
+              product.bullets:
+                duration: { p50: 30, p90: 45, p99: 65 }
+                cached: true
+
+      Main.AddToCart:
+        render_cost: 1
+
+      Carousels:
+        render_cost: 14
+        queries:
+          getRecommendations:
+            ops:
+              reco.personalized: { p50: 120, p90: 180, p99: 310 }
+              product.cards: { p50: 40, p90: 60, p99: 85 }
+              pricing.batch: { p50: 80, p90: 120, p99: 190 }
+
+      Reviews:
+        render_cost: 6
+        queries:
+          getReviews:
+            ops:
+              reviews.list: { p50: 200, p90: 350, p99: 680 }
+
+    Footer:
+      render_cost: 5
+      queries:
+        getFooter:
+          ops:
+            cms.footer: { p50: 30, p90: 45, p99: 60 }
+
+csr_boundaries:
+  CartIndicator:
+    render_cost: 2
+    queries:
+      getUserCart:
+        ops:
+          user.cart: { p50: 50, p90: 80, p99: 130 }
+
+  FavoriteButton:
+    render_cost: 1
+    queries:
+      getUserFavorites:
+        ops:
+          user.favorites: { p50: 40, p90: 60, p99: 95 }
+
+  ReviewsQA:
+    render_cost: 4
+    queries:
+      getReviewsQA:
+        ops:
+          reviews.qa: { p50: 120, p90: 200, p99: 350 }

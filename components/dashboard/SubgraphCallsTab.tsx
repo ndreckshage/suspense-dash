@@ -7,11 +7,14 @@ import type {
 } from "@/lib/metrics-store";
 import { SUBGRAPHS, type SubgraphName } from "@/lib/gql-federation";
 import { percentile } from "@/lib/percentile";
+import type { MockSubgraphData } from "@/lib/mock-metrics";
 
 interface Props {
   queries: QueryMetric[];
   subgraphOps: SubgraphOperationMetric[];
   pctl: number;
+  /** Pre-computed mock data keyed by percentile */
+  mock?: Record<number, MockSubgraphData>;
 }
 
 interface SubgraphSummary {
@@ -31,7 +34,7 @@ interface OperationDetail {
   isClient: boolean;
 }
 
-export function SubgraphCallsTab({ queries, subgraphOps, pctl }: Props) {
+export function SubgraphCallsTab({ queries, subgraphOps, pctl, mock }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const toggleExpand = useCallback((name: string) => {
@@ -44,6 +47,11 @@ export function SubgraphCallsTab({ queries, subgraphOps, pctl }: Props) {
   }, []);
 
   const { summary, subgraphRows } = useMemo(() => {
+    // Mock data path — use pre-computed values directly
+    if (mock?.[pctl]) {
+      return { summary: mock[pctl].summary, subgraphRows: mock[pctl].rows };
+    }
+
     if (subgraphOps.length === 0) {
       return { summary: { ssrCallsPerReq: 0, csrCallsPerReq: 0, dedupedPerReq: 0 }, subgraphRows: [] };
     }
@@ -130,9 +138,9 @@ export function SubgraphCallsTab({ queries, subgraphOps, pctl }: Props) {
     subgraphRows.sort((a, b) => b.callsPerReq - a.callsPerReq);
 
     return { summary, subgraphRows };
-  }, [subgraphOps, pctl]);
+  }, [subgraphOps, pctl, mock]);
 
-  if (subgraphOps.length === 0) {
+  if (subgraphRows.length === 0 && subgraphOps.length === 0) {
     return (
       <div className="text-center py-12 text-zinc-500">
         No metrics data. Generate load to populate the dashboard.

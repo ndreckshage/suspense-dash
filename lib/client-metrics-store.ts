@@ -240,6 +240,12 @@ export const clientMetricsStore = {
     saveToStorage(merged);
   },
 
+  /** Replace all stored metrics with the provided data (used by YAML import) */
+  loadMetrics(data: ClientMetrics) {
+    saveToStorage(data);
+    try { localStorage.setItem(SEEDED_KEY, "1"); } catch {}
+  },
+
   clear() {
     saveToStorage(emptyMetrics());
     // Mark that user has seen the dashboard — don't auto-seed again
