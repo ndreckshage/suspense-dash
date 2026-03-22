@@ -101,7 +101,7 @@ function resolveSubgraph(opName: string): string {
   if (known) return known.subgraph;
   const slashIdx = opName.indexOf("/");
   if (slashIdx > 0) return opName.slice(0, slashIdx);
-  return "unknown-subgraph";
+  return opName;
 }
 
 function resolveOpName(rawName: string): string {
