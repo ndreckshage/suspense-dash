@@ -281,8 +281,12 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
         ? layout.wallStart + layout.fetchDuration + layout.renderCost
         : 0;
 
-      // LCP boundary — use the lcpCritical flag from YAML / live metrics
-      const lcpBoundary = timings.find((t) => t.lcpCritical) ?? null;
+      // LCP boundary — use the last lcpCritical boundary (the actual LCP element,
+      // not its ancestors which may also be marked critical)
+      const lcpCriticalTimings = timings.filter((t) => t.lcpCritical);
+      const lcpBoundary = lcpCriticalTimings.length > 0
+        ? lcpCriticalTimings[lcpCriticalTimings.length - 1]
+        : null;
       const lcpDataReady = lcpBoundary
         ? lcpBoundary.wallStart + lcpBoundary.fetchDuration
         : 0;
@@ -350,7 +354,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
     const ssrEnds = timings.map((t) => t.wallStart + t.total);
 
     if (timelineScope === "lcp") {
-      // LCP-only: cap timeline right after LCP render (exclude non-LCP SSR tail)
+      // LCP-only: cap timeline right after LCP render + 10% padding
       const totalMs = Math.max(lcpRendered, 1);
       return Math.ceil(totalMs * 1.10);
     }
