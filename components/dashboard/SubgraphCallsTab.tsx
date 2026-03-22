@@ -5,6 +5,7 @@ import type {
   QueryMetric,
   SubgraphOperationMetric,
 } from "@/lib/metrics-store";
+import { SUBGRAPHS, type SubgraphName } from "@/lib/gql-federation";
 import { percentile } from "@/lib/percentile";
 import type { MockSubgraphData } from "@/lib/mock-metrics";
 import { buildSubgraphColorMap, DEFAULT_SUBGRAPH_COLOR } from "@/lib/subgraph-colors";
@@ -141,8 +142,8 @@ export function SubgraphCallsTab({ queries, subgraphOps, pctl, mock }: Props) {
     const subgraphRows: SubgraphSummary[] = [];
 
     for (const [sgName, sgUncachedOps] of uncachedBySubgraph) {
-      const color = subgraphColorMap.get(sgName) ?? DEFAULT_SUBGRAPH_COLOR;
-      const sloMs = 0;
+      const color = SUBGRAPHS[sgName as SubgraphName]?.color ?? subgraphColorMap.get(sgName) ?? DEFAULT_SUBGRAPH_COLOR;
+      const sloMs = SUBGRAPHS[sgName as SubgraphName]?.sloMs ?? 0;
       const sgAllOps = allBySubgraph.get(sgName) ?? [];
 
       // Build unique callers (query + boundary pairs) with per-caller durations

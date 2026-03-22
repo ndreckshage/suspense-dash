@@ -97,15 +97,12 @@ const PCTLS = [50, 75, 90, 95, 99];
 
 // ---- Helpers ----
 
-function resolveSubgraph(opName: string): string {
-  const slashIdx = opName.indexOf("/");
-  if (slashIdx > 0) return opName.slice(0, slashIdx);
-  return "unknown-subgraph";
+/** Op keys in the YAML are just subgraph names. */
+function resolveSubgraph(rawName: string): string {
+  return rawName;
 }
 
 function resolveOpName(rawName: string): string {
-  const slashIdx = rawName.indexOf("/");
-  if (slashIdx > 0) return rawName.slice(slashIdx + 1);
   return rawName;
 }
 
