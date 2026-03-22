@@ -89,6 +89,7 @@ interface BoundaryTiming {
   lcpCritical: boolean;
   queryName: string;
   cached: boolean;
+  subgraphColor?: string;
 }
 
 const BOUNDARY_COLORS: Record<string, string> = {
@@ -113,6 +114,7 @@ const BOUNDARY_COLORS: Record<string, string> = {
 };
 
 export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, loafEntries, navigationTimings, mock }: Props) {
+  const [timelineScope, setTimelineScope] = useState<"lcp" | "full">("full");
   // Separate SSR and CSR metrics
   const ssrBoundaries = useMemo(
     () => boundaries.filter((b) => b.phase !== "csr"),
@@ -279,10 +281,8 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
         ? layout.wallStart + layout.fetchDuration + layout.renderCost
         : 0;
 
-      // LCP boundary — hero image is the true LCP element (largest visible content)
-      const hero = timings.find((t) => t.lcpCritical && t.name === "Hero");
-      const pdp = timings.find((t) => t.lcpCritical && t.name === "Title");
-      const lcpBoundary = hero ?? pdp;
+      // LCP boundary — use the lcpCritical flag from YAML / live metrics
+      const lcpBoundary = timings.find((t) => t.lcpCritical) ?? null;
       const lcpDataReady = lcpBoundary
         ? lcpBoundary.wallStart + lcpBoundary.fetchDuration
         : 0;
@@ -348,14 +348,20 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
   const maxMs = useMemo(() => {
     if (timings.length === 0) return 1;
     const ssrEnds = timings.map((t) => t.wallStart + t.total);
+
+    if (timelineScope === "lcp") {
+      // LCP-only: cap timeline right after LCP render
+      const totalMs = Math.max(...ssrEnds, lcpRendered, 1);
+      return Math.ceil(totalMs * 1.10);
+    }
+
+    // Full scope: include CSR + init complete, but cap there (not at LoAF end)
     const csrMax = hydrationMs > 0
       ? Math.min(csrInitComplete, hydrationMs + 3000)
       : csrInitComplete;
-    const loafEnds = aggregatedLoaf.map((e) => e.startTime + e.duration);
-    const loafMax = loafEnds.length > 0 ? Math.max(...loafEnds) : 0;
-    const totalMs = Math.max(...ssrEnds, lcpRendered, csrMax, loafMax, 1);
-    return Math.ceil(totalMs * 1.15);
-  }, [timings, lcpRendered, csrInitComplete, hydrationMs, aggregatedLoaf]);
+    const totalMs = Math.max(...ssrEnds, lcpRendered, csrMax, initializationMs, 1);
+    return Math.ceil(totalMs * 1.10);
+  }, [timings, lcpRendered, csrInitComplete, hydrationMs, initializationMs, timelineScope]);
 
   if (timings.length === 0) {
     return (
@@ -378,6 +384,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
     start: number;
     duration: number;
     lcpCritical: boolean;
+    subgraphColor?: string;
   }[] = [];
   for (const t of renderTimeline) {
     const fetchEnd = t.wallStart + t.fetchDuration;
@@ -387,6 +394,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
       start: renderStart,
       duration: t.renderCost,
       lcpCritical: t.lcpCritical,
+      subgraphColor: t.subgraphColor,
     });
     threadCursor = renderStart + t.renderCost;
   }
@@ -415,6 +423,31 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
           visible content had all its data.
         </p>
       </TabDescription>
+      {/* Scope toggle */}
+      <div className="flex items-center gap-1 text-xs">
+        <span className="text-zinc-600 mr-1">Scope:</span>
+        <button
+          onClick={() => setTimelineScope("lcp")}
+          className={`px-2 py-0.5 rounded-full border transition-all ${
+            timelineScope === "lcp"
+              ? "border-blue-500 text-blue-300 bg-blue-500/10"
+              : "border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50"
+          }`}
+        >
+          LCP Only
+        </button>
+        <button
+          onClick={() => setTimelineScope("full")}
+          className={`px-2 py-0.5 rounded-full border transition-all ${
+            timelineScope === "full"
+              ? "border-purple-500 text-purple-300 bg-purple-500/10"
+              : "border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50"
+          }`}
+        >
+          Full Init
+        </button>
+      </div>
+
       <div className="min-w-[600px] md:min-w-0 space-y-6 overflow-hidden">
       {/* Time axis + marker labels */}
       <div>
@@ -459,7 +492,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
               </div>
             </Tooltip>
           )}
-          {hydrationMs > 0 && (
+          {timelineScope === "full" && hydrationMs > 0 && (
             <Tooltip content={`Hydration at ${Math.round(hydrationMs)}ms — React hydrates the server-rendered HTML and attaches event handlers`}>
               <div className="relative h-4">
                 <div
@@ -474,7 +507,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
               </div>
             </Tooltip>
           )}
-          {csrInitComplete > 0 && (
+          {timelineScope === "full" && csrInitComplete > 0 && (
             <Tooltip content={`Init complete at ${Math.round(csrInitComplete)}ms — all client-side queries resolved, page fully interactive`}>
               <div className="relative h-4">
                 <div
@@ -520,7 +553,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
                   (t.fetchDuration / maxMs) * 100,
                   t.cached ? 0.8 : 1.5,
                 );
-                const color = BOUNDARY_COLORS[t.name] ?? "rgb(100, 116, 139)";
+                const color = t.subgraphColor ?? BOUNDARY_COLORS[t.name] ?? "rgb(100, 116, 139)";
 
                 const tooltipLines: TooltipLine[] = t.cached
                   ? [{ label: "Query", value: t.queryName }, { label: "Status", value: "Cached (React cache() dedup)", color: "text-cyan-400" }]
@@ -577,13 +610,13 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
               style={{ left: `calc(${(lcpRendered / maxMs) * 100}% + 12px)` }}
             />
           )}
-          {hydrationMs > 0 && (
+          {timelineScope === "full" && hydrationMs > 0 && (
             <div
               className="absolute top-0 bottom-0 w-px border-l border-dashed border-amber-400/60 z-0"
               style={{ left: `calc(${(hydrationMs / maxMs) * 100}% + 12px)` }}
             />
           )}
-          {csrInitComplete > 0 && (
+          {timelineScope === "full" && csrInitComplete > 0 && (
             <div
               className="absolute top-0 bottom-0 w-px bg-purple-400/40 z-0"
               style={{ left: `calc(${(csrInitComplete / maxMs) * 100}% + 12px)` }}
@@ -614,7 +647,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
             {renderBlocks.map((block) => {
               const leftPct = (block.start / maxMs) * 100;
               const widthPct = Math.max((block.duration / maxMs) * 100, 1.5);
-              const color = BOUNDARY_COLORS[block.name] ?? "rgb(100, 116, 139)";
+              const color = block.subgraphColor ?? BOUNDARY_COLORS[block.name] ?? "rgb(100, 116, 139)";
 
               return (
                 <Tooltip
@@ -664,13 +697,13 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
               style={{ left: `calc(${(lcpRendered / maxMs) * 100}% + 12px)` }}
             />
           )}
-          {hydrationMs > 0 && (
+          {timelineScope === "full" && hydrationMs > 0 && (
             <div
               className="absolute top-3 bottom-3 w-px border-l border-dashed border-amber-400/60 z-0"
               style={{ left: `calc(${(hydrationMs / maxMs) * 100}% + 12px)` }}
             />
           )}
-          {csrInitComplete > 0 && (
+          {timelineScope === "full" && csrInitComplete > 0 && (
             <div
               className="absolute top-3 bottom-3 w-px bg-purple-400/40 z-0"
               style={{ left: `calc(${(csrInitComplete / maxMs) * 100}% + 12px)` }}
@@ -680,7 +713,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
       </div>
 
       {/* CSR Queries timeline */}
-      {csrTimings.length > 0 && (
+      {timelineScope === "full" && csrTimings.length > 0 && (
         <div>
           <div className="text-xs text-zinc-400 mb-2 font-medium">
             CSR Queries{" "}
@@ -783,7 +816,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
       )}
 
       {/* Long Animation Frames */}
-      <div>
+      {timelineScope === "full" && <div>
         <div className="text-xs text-zinc-400 mb-2 font-medium">
           CSR Main Thread{" "}
           <span className="text-zinc-600">(long animation frames &gt;50ms)</span>
@@ -908,7 +941,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
             />
           )}
         </div>
-      </div>
+      </div>}
 
       {/* Summary */}
       <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs font-mono">
@@ -927,10 +960,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
         <div>
           <span className="text-zinc-500">LCP query: </span>
           <span className="text-zinc-300">
-            {timings.find((t) => t.name === "Title")?.fetchDuration ??
-              timings.find((t) => t.name === "Hero")?.fetchDuration ??
-              0}
-            ms
+            {timings.find((t) => t.lcpCritical)?.fetchDuration ?? 0}ms
           </span>
         </div>
         {lcpBlocked > 0 && (

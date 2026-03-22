@@ -264,6 +264,7 @@ function computeWaterfall(
   initializationMs: number,
   navTiming: NavigationTiming | null,
   loafEntries: MockLoAFEntry[],
+  colorMap: Map<string, string>,
 ): MockWaterfallData {
   const flat = flattenTree(ssrBoundaries);
 
@@ -370,6 +371,19 @@ function computeWaterfall(
         return resolved.cached;
       });
 
+    // Determine color from the heaviest subgraph (highest p99 duration)
+    let subgraphColor: string | undefined;
+    let maxOpDuration = 0;
+    for (const q of s.info.queries) {
+      for (const op of q.ops) {
+        const { duration, cached } = resolveOpDuration(op.value, 99);
+        if (!cached && duration > maxOpDuration) {
+          maxOpDuration = duration;
+          subgraphColor = colorMap.get(op.subgraphName);
+        }
+      }
+    }
+
     return {
       name: s.info.name,
       boundaryPath: s.info.path,
@@ -381,6 +395,7 @@ function computeWaterfall(
       lcpCritical: s.info.lcpCritical,
       queryName,
       cached: isCached,
+      subgraphColor,
     };
   });
 
@@ -619,9 +634,11 @@ function computeSubgraphs(
   let csrUncached = 0;
   let totalCached = 0;
 
-  // Collect all ops
+  // Collect all ops — keyed by (opName, queryName, boundaryPath, phase) to
+  // correctly track isClient per call site rather than collapsing across phases
   const opsBySubgraph = new Map<string, {
     ops: Map<string, {
+      opName: string;
       durations: number[];
       boundaries: Set<string>;
       queryNames: Set<string>;
@@ -645,22 +662,25 @@ function computeSubgraphs(
           opsBySubgraph.set(op.subgraphName, sg);
         }
 
-        let opData = sg.ops.get(op.opName);
+        // Key by opName + queryName + boundaryPath + phase to avoid collapsing
+        // SSR and CSR calls to the same subgraph into one entry
+        const opKey = `${op.opName}:${op.queryName}:${op.boundaryPath}:${op.phase}`;
+        let opData = sg.ops.get(opKey);
         if (!opData) {
           opData = {
+            opName: op.opName,
             durations: [],
             boundaries: new Set(),
             queryNames: new Set(),
-            isClient: false,
+            isClient: op.phase === "csr",
             cached,
           };
-          sg.ops.set(op.opName, opData);
+          sg.ops.set(opKey, opData);
         }
 
         if (!cached) opData.durations.push(duration);
         opData.boundaries.add(op.boundaryPath);
         opData.queryNames.add(op.queryName);
-        if (op.phase === "csr") opData.isClient = true;
       }
     }
   }
@@ -673,7 +693,7 @@ function computeSubgraphs(
     let sgMaxDuration = 0;
     let sgUncachedCount = 0;
 
-    for (const [opName, opData] of sg.ops) {
+    for (const [, opData] of sg.ops) {
       const uncachedCount = opData.durations.length;
       sgUncachedCount += uncachedCount;
       const durationPctl = opData.durations.length > 0
@@ -682,7 +702,7 @@ function computeSubgraphs(
       if (durationPctl > sgMaxDuration) sgMaxDuration = durationPctl;
 
       operations.push({
-        name: opName,
+        name: opData.opName,
         callsPerReq: uncachedCount,
         durationPctl,
         boundaries: [...opData.boundaries],
@@ -833,7 +853,7 @@ export function parseYamlDashboard(yamlString: string): MockDashboardData {
     // Derive loafCount from entries
     if (navTiming) navTiming.loafCount = loafEntries.length;
 
-    waterfall[pctl] = computeWaterfall(ssrRoots, csrRoots, pctl, hydrationMs, initializationMs, navTiming, loafEntries);
+    waterfall[pctl] = computeWaterfall(ssrRoots, csrRoots, pctl, hydrationMs, initializationMs, navTiming, loafEntries, subgraphColorMap);
     // Tree uses the full (un-split) roots so CSR boundaries stay nested under parents
     tree[pctl] = computeTree(allRoots, [], pctl, subgraphColorMap, subgraphSloMap);
     subgraphs[pctl] = computeSubgraphs(ssrRoots, csrRoots, pctl, subgraphColorMap, subgraphSloMap);

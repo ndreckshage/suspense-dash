@@ -36,13 +36,13 @@ interface SubgraphSummary {
   hasClientCalls: boolean;
 }
 
-type SloFilter = "exceeded" | "noSlo" | null;
+type SloFilter = "exceeded" | "noSlo" | "hasSlo" | null;
 
 export function SubgraphCallsTab({ queries, subgraphOps, pctl, mock }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [sloFilter, setSloFilter] = useState<SloFilter>(null);
   const toggleSloFilter = useCallback(
-    (f: "exceeded" | "noSlo") => setSloFilter((prev) => (prev === f ? null : f)),
+    (f: "exceeded" | "noSlo" | "hasSlo") => setSloFilter((prev) => (prev === f ? null : f)),
     [],
   );
 
@@ -96,7 +96,7 @@ export function SubgraphCallsTab({ queries, subgraphOps, pctl, mock }: Props) {
             ...c,
             durationPctl: percentile(callerDurations.get(key) ?? [], pctl),
           })),
-          hasClientCalls: r.operations.some((op) => op.isClient),
+          hasClientCalls: r.operations.length > 0 && r.operations.every((op) => op.isClient),
         };
       });
       return { summary: mock[pctl].summary, subgraphRows: rows };
@@ -178,7 +178,7 @@ export function SubgraphCallsTab({ queries, subgraphOps, pctl, mock }: Props) {
           ...c,
           durationPctl: percentile(callerDurations.get(key) ?? [], pctl),
         })),
-        hasClientCalls: sgAllOps.some((o) => o.phase === "csr"),
+        hasClientCalls: sgAllOps.length > 0 && sgAllOps.every((o) => o.phase === "csr"),
       });
     }
 
@@ -200,6 +200,7 @@ export function SubgraphCallsTab({ queries, subgraphOps, pctl, mock }: Props) {
   const filteredRows = useMemo(() => {
     if (!sloFilter) return subgraphRows;
     if (sloFilter === "exceeded") return subgraphRows.filter((r) => r.sloMs > 0 && r.durationPctl > r.sloMs);
+    if (sloFilter === "hasSlo") return subgraphRows.filter((r) => r.sloMs > 0);
     return subgraphRows.filter((r) => r.sloMs === 0); // noSlo
   }, [subgraphRows, sloFilter]);
 
@@ -250,6 +251,17 @@ export function SubgraphCallsTab({ queries, subgraphOps, pctl, mock }: Props) {
         >
           <span className="w-2 h-2 rounded-full flex-shrink-0 bg-amber-400" />
           No SLO
+        </button>
+        <button
+          onClick={() => toggleSloFilter("hasSlo")}
+          className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border transition-all ${
+            sloFilter === "hasSlo"
+              ? "border-green-500 text-green-300 bg-green-500/10"
+              : "border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50"
+          }`}
+        >
+          <span className="w-2 h-2 rounded-full flex-shrink-0 bg-green-400" />
+          Has SLO
         </button>
         {sloFilter && (
           <button
@@ -405,19 +417,22 @@ function SubgraphRow({
         </td>
       </tr>
       {isExpanded &&
-        row.callers.map((caller) => (
+        row.callers.map((caller) => {
+          const component = caller.boundary.split(".").pop() ?? "";
+          const fullLabel = `${caller.queryName} → ${component}`;
+          return (
           <tr
             key={`${caller.queryName}:${caller.boundary}`}
             className="border-b border-zinc-800/30 bg-zinc-900/50"
           >
             <td className="py-1 px-2" colSpan={2}>
-              <div className="flex items-center gap-1.5 pl-9">
-                <span className="text-zinc-600">&#x2514;</span>
-                <span className="text-teal-400 text-xs">{caller.queryName}</span>
-                <span className="text-zinc-600 text-xs">&rarr;</span>
-                <span className="text-zinc-400 text-xs">{caller.boundary.split(".").pop()}</span>
+              <div className="flex items-center gap-1.5 pl-9 min-w-0" title={fullLabel}>
+                <span className="text-zinc-600 flex-shrink-0">&#x2514;</span>
+                <span className="text-teal-400 text-xs truncate max-w-[80px]">{caller.queryName}</span>
+                <span className="text-zinc-600 text-xs flex-shrink-0">&rarr;</span>
+                <span className="text-zinc-400 text-xs truncate max-w-[60px]">{component}</span>
                 {caller.isClient && (
-                  <span className="text-xs bg-purple-900/30 text-purple-400 rounded px-1 py-0.5">
+                  <span className="text-xs bg-purple-900/30 text-purple-400 rounded px-1 py-0.5 flex-shrink-0">
                     client
                   </span>
                 )}
@@ -428,7 +443,8 @@ function SubgraphRow({
             </td>
             <td colSpan={3} />
           </tr>
-        ))}
+          );
+        })}
     </>
   );
 }

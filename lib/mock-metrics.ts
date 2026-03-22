@@ -20,6 +20,8 @@ export interface WaterfallTiming {
   lcpCritical: boolean;
   queryName: string;
   cached: boolean;
+  /** Color of the heaviest subgraph in this boundary's queries */
+  subgraphColor?: string;
 }
 
 export interface WaterfallCsrTiming {

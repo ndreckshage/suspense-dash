@@ -459,6 +459,12 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
   const toggleSloExceededFilter = useCallback(() => setSloExceededFilter((prev) => !prev), []);
   const [noSloFilter, setNoSloFilter] = useState(false);
   const toggleNoSloFilter = useCallback(() => setNoSloFilter((prev) => !prev), []);
+  const [hasSloFilter, setHasSloFilter] = useState(false);
+  const toggleHasSloFilter = useCallback(() => setHasSloFilter((prev) => !prev), []);
+
+  // Hide ancestry — only show direct matches, no parent chain
+  const [hideAncestry, setHideAncestry] = useState(false);
+  const toggleHideAncestry = useCallback(() => setHideAncestry((prev) => !prev), []);
 
   // Compute boundaries with subgraphs exceeding SLO
   const sloExceededPaths = useMemo(() => {
@@ -481,6 +487,22 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
     const paths = new Set<string>();
     for (const n of treeNodes) {
       if (n.type === "subgraph-op" && !n.cached && n.slo === 0) {
+        paths.add(n.boundaryPath);
+        let candidate = getParentPath(n.boundaryPath);
+        while (candidate !== null) {
+          paths.add(candidate);
+          candidate = getParentPath(candidate);
+        }
+      }
+    }
+    return paths;
+  }, [treeNodes]);
+
+  // Compute boundaries with subgraphs that have a defined SLO
+  const hasSloPaths = useMemo(() => {
+    const paths = new Set<string>();
+    for (const n of treeNodes) {
+      if (n.type === "subgraph-op" && !n.cached && n.slo > 0) {
         paths.add(n.boundaryPath);
         let candidate = getParentPath(n.boundaryPath);
         while (candidate !== null) {
@@ -531,10 +553,24 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
     return matching;
   }, [phaseFilter, treeNodes]);
 
+  // Helper: add ancestors to a set of paths
+  function addAncestors(paths: Set<string>): Set<string> {
+    if (hideAncestry) return paths;
+    const result = new Set(paths);
+    for (const p of paths) {
+      let candidate = getParentPath(p);
+      while (candidate !== null) {
+        result.add(candidate);
+        candidate = getParentPath(candidate);
+      }
+    }
+    return result;
+  }
+
   // Compute which boundaries match the subgraph filter
   const filteredBoundaryPaths = useMemo(() => {
     const hasSubgraphFilter = selectedSubgraphs.size > 0;
-    if (!hasSubgraphFilter && !lcpFilter && !phaseFilter && !sloExceededFilter && !noSloFilter) return null; // no filter
+    if (!hasSubgraphFilter && !lcpFilter && !phaseFilter && !sloExceededFilter && !noSloFilter && !hasSloFilter) return null; // no filter
 
     const subgraphMatching = new Set<string>();
     if (hasSubgraphFilter) {
@@ -553,14 +589,9 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
           }
         }
       }
-      // Include ancestors so the tree hierarchy stays visible
-      for (const p of directMatches) {
+      // Include ancestors so the tree hierarchy stays visible (unless hidden)
+      for (const p of addAncestors(directMatches)) {
         subgraphMatching.add(p);
-        let candidate = getParentPath(p);
-        while (candidate !== null) {
-          subgraphMatching.add(candidate);
-          candidate = getParentPath(candidate);
-        }
       }
     }
 
@@ -569,28 +600,48 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
 
     if (hasSubgraphFilter) result = subgraphMatching;
     if (lcpFilter) {
-      result = result
-        ? new Set([...result].filter((p) => lcpBoundaryPaths.has(p)))
+      const lcpSet = hideAncestry
+        ? new Set([...treeNodes].filter((n) => n.lcpCritical).map((n) => n.boundaryPath))
         : lcpBoundaryPaths;
+      result = result
+        ? new Set([...result].filter((p) => lcpSet.has(p)))
+        : lcpSet;
     }
     if (phaseBoundaryPaths) {
-      result = result
-        ? new Set([...result].filter((p) => phaseBoundaryPaths.has(p)))
+      const phaseSet = hideAncestry
+        ? new Set([...treeNodes].filter((n) => n.type === "boundary" && (n.phase ?? "ssr") === phaseFilter).map((n) => n.boundaryPath))
         : phaseBoundaryPaths;
+      result = result
+        ? new Set([...result].filter((p) => phaseSet.has(p)))
+        : phaseSet;
     }
     if (sloExceededFilter) {
-      result = result
-        ? new Set([...result].filter((p) => sloExceededPaths.has(p)))
+      const sloSet = hideAncestry
+        ? new Set([...treeNodes].filter((n) => n.type === "subgraph-op" && !n.cached && n.slo > 0 && n.fetchPctl > n.slo).map((n) => n.boundaryPath))
         : sloExceededPaths;
+      result = result
+        ? new Set([...result].filter((p) => sloSet.has(p)))
+        : sloSet;
     }
     if (noSloFilter) {
-      result = result
-        ? new Set([...result].filter((p) => noSloPaths.has(p)))
+      const noSloSet = hideAncestry
+        ? new Set([...treeNodes].filter((n) => n.type === "subgraph-op" && !n.cached && n.slo === 0).map((n) => n.boundaryPath))
         : noSloPaths;
+      result = result
+        ? new Set([...result].filter((p) => noSloSet.has(p)))
+        : noSloSet;
+    }
+    if (hasSloFilter) {
+      const hasSloSet = hideAncestry
+        ? new Set([...treeNodes].filter((n) => n.type === "subgraph-op" && !n.cached && n.slo > 0).map((n) => n.boundaryPath))
+        : hasSloPaths;
+      result = result
+        ? new Set([...result].filter((p) => hasSloSet.has(p)))
+        : hasSloSet;
     }
 
     return result;
-  }, [selectedSubgraphs, subgraphOps, lcpFilter, lcpBoundaryPaths, phaseFilter, phaseBoundaryPaths, sloExceededFilter, sloExceededPaths, noSloFilter, noSloPaths, mock, treeNodes]);
+  }, [selectedSubgraphs, subgraphOps, lcpFilter, lcpBoundaryPaths, phaseFilter, phaseBoundaryPaths, sloExceededFilter, sloExceededPaths, noSloFilter, noSloPaths, hasSloFilter, hasSloPaths, mock, treeNodes, hideAncestry]);
 
   // Call count summary stats (uncached = actual network calls)
   const callSummary = useMemo(() => {
@@ -751,6 +802,17 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
           <span className="w-2 h-2 rounded-full flex-shrink-0 bg-amber-400" />
           No SLO
         </button>
+        <button
+          onClick={toggleHasSloFilter}
+          className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border transition-all ${
+            hasSloFilter
+              ? "border-green-500 text-green-300 bg-green-500/10"
+              : "border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50"
+          }`}
+        >
+          <span className="w-2 h-2 rounded-full flex-shrink-0 bg-green-400" />
+          Has SLO
+        </button>
         <span className="text-zinc-800 mx-0.5">|</span>
         <button
           onClick={() => setShowSubgraphFilters((prev) => !prev)}
@@ -789,13 +851,26 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
               </button>
             );
           })}
-        {(selectedSubgraphs.size > 0 || lcpFilter || phaseFilter || sloExceededFilter || noSloFilter) && (
-          <button
-            onClick={() => { clearSubgraphFilter(); setLcpFilter(false); setPhaseFilter(null); setSloExceededFilter(false); setNoSloFilter(false); }}
-            className="text-zinc-500 hover:text-zinc-300 ml-2 underline"
-          >
-            Clear
-          </button>
+        {(selectedSubgraphs.size > 0 || lcpFilter || phaseFilter || sloExceededFilter || noSloFilter || hasSloFilter) && (
+          <>
+            <span className="text-zinc-800 mx-0.5">|</span>
+            <button
+              onClick={toggleHideAncestry}
+              className={`px-2 py-0.5 rounded-full border transition-all ${
+                hideAncestry
+                  ? "border-zinc-500 text-zinc-200 bg-zinc-800"
+                  : "border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50"
+              }`}
+            >
+              Hide Ancestry
+            </button>
+            <button
+              onClick={() => { clearSubgraphFilter(); setLcpFilter(false); setPhaseFilter(null); setSloExceededFilter(false); setNoSloFilter(false); setHasSloFilter(false); setHideAncestry(false); }}
+              className="text-zinc-500 hover:text-zinc-300 ml-2 underline"
+            >
+              Clear
+            </button>
+          </>
         )}
       </div>
       {/* Call count summary */}
