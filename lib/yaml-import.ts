@@ -94,27 +94,6 @@ const RESERVED_KEYS = new Set([
 // Standard percentiles the dashboard supports
 const PCTLS = [50, 75, 90, 95, 99];
 
-// Boundary-level SLOs (mirrors BoundaryTreeTable)
-const BOUNDARY_SLOS: Record<string, number> = {
-  Layout: 75,
-  "Layout.Nav": 250,
-  "Layout.Content": 150,
-  "Layout.Content.Breadcrumbs": 150,
-  "Layout.Content.Main.Hero": 75,
-  "Layout.Content.Main.Thumbnails": 150,
-  "Layout.Content.Main.Title": 125,
-  "Layout.Content.Main.Pricing": 750,
-  "Layout.Content.Main.Bullets": 100,
-  "Layout.Content.Main.Options": 100,
-  "Layout.Content.Main.AddToCart": 25,
-  "Layout.Content.Carousels": 500,
-  "Layout.Content.Reviews": 690,
-  "Layout.Content.Reviews.ReviewsQA": 400,
-  "Layout.Footer": 125,
-  "Layout.Nav.CartIndicator": 200,
-  "Layout.Content.Main.Hero.FavoriteButton": 150,
-};
-
 // ---- Helpers ----
 
 function resolveSubgraph(opName: string): string {
@@ -522,7 +501,7 @@ function computeTree(
       renderCostPctl: renderCost,
       blockedPctl: 0,
       totalPctl: total,
-      slo: BOUNDARY_SLOS[b.path] ?? 500,
+      slo: 0,
       lcpCritical: b.lcpCritical,
       cached: false,
       hasChildren,

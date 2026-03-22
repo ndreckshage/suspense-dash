@@ -189,27 +189,6 @@ function buildTreeFromMetrics(
 
 const median = medianUtil;
 
-// Boundary-level SLOs
-const BOUNDARY_SLOS: Record<string, number> = {
-  Layout: 75,
-  "Layout.Nav": 250,
-  "Layout.Content": 150,
-  "Layout.Content.Breadcrumbs": 150,
-  "Layout.Content.Main.Hero": 75,
-  "Layout.Content.Main.Thumbnails": 150,
-  "Layout.Content.Main.Title": 125,
-  "Layout.Content.Main.Pricing": 750,
-  "Layout.Content.Main.Bullets": 100,
-  "Layout.Content.Main.Options": 100,
-  "Layout.Content.Main.AddToCart": 25,
-  "Layout.Content.Carousels": 500,
-  "Layout.Content.Reviews": 690,
-  "Layout.Content.Reviews.ReviewsQA": 400,
-  "Layout.Footer": 125,
-  "Layout.Nav.CartIndicator": 200,
-  "Layout.Content.Main.Hero.FavoriteButton": 150,
-};
-
 interface TreeNode {
   name: string;
   path: string;
@@ -339,7 +318,7 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
           renderCostPctl: percentile(renderCosts, pctl),
           blockedPctl: 0,
           totalPctl: percentile(durations, pctl),
-          slo: BOUNDARY_SLOS[item.boundaryPath] ?? 500,
+          slo: 0,
           lcpCritical: item.lcpCritical ?? false,
           cached: false,
           hasChildren: boundaryHasChildren.has(item.boundaryPath),
@@ -811,12 +790,12 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
         </thead>
         <tbody>
           {visibleNodes.map((node) => {
-            const metricValue = node.type === "boundary" ? node.totalPctl : node.fetchPctl;
-            const hasSlo = node.slo > 0;
-            const sloRatio = node.cached || !hasSlo ? 0 : metricValue / node.slo;
-            const noSlo = !hasSlo && !node.cached && node.type !== "query";
+            const isSubgraphOp = node.type === "subgraph-op";
+            const hasSlo = isSubgraphOp && node.slo > 0;
+            const noSlo = isSubgraphOp && !hasSlo && !node.cached;
+            const sloRatio = hasSlo && !node.cached ? node.fetchPctl / node.slo : 0;
             const statusColor =
-              node.cached
+              !isSubgraphOp || node.cached
                 ? "text-zinc-600"
                 : noSlo
                   ? "text-amber-500"
@@ -825,15 +804,18 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
                     : sloRatio > 0.8
                       ? "text-yellow-400"
                       : "text-green-400";
-            const statusIcon = node.cached
-              ? "\u2014"
-              : noSlo
-                ? "?"
-                : sloRatio > 1
-                  ? "!!!"
-                  : sloRatio > 0.8
-                    ? "!!"
-                    : "OK";
+            const statusIcon =
+              !isSubgraphOp
+                ? ""
+                : node.cached
+                  ? "\u2014"
+                  : noSlo
+                    ? "?"
+                    : sloRatio > 1
+                      ? "!!!"
+                      : sloRatio > 0.8
+                        ? "!!"
+                        : "OK";
 
             const blockedHighlight =
               node.blockedPctl > 0 && node.lcpCritical
@@ -938,13 +920,11 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
                       : `${node.fetchPctl}ms`}
                 </td>
                 <td className={`text-right py-1.5 px-2 ${noSlo ? "text-amber-500/70 italic" : "text-zinc-500"}`}>
-                  {node.cached
-                    ? ""
-                    : node.type === "query"
-                      ? ""
-                      : hasSlo
-                        ? `${node.slo}ms`
-                        : "none"}
+                  {isSubgraphOp && !node.cached
+                    ? hasSlo
+                      ? `${node.slo}ms`
+                      : "none"
+                    : ""}
                 </td>
                 <td className={`text-center py-1.5 px-2 ${statusColor}`}>
                   {statusIcon}
