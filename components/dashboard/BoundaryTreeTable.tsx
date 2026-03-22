@@ -12,6 +12,7 @@ import {
 } from "@/lib/gql-federation";
 import { percentile, median as medianUtil } from "@/lib/percentile";
 import type { MockTreeData } from "@/lib/mock-metrics";
+import { buildSubgraphColorMap, DEFAULT_SUBGRAPH_COLOR } from "@/lib/subgraph-colors";
 
 interface Props {
   boundaries: BoundaryMetric[];
@@ -435,6 +436,23 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
   }, []);
   const clearSubgraphFilter = useCallback(() => setSelectedSubgraphs(new Set()), []);
 
+  // Derive available subgraphs dynamically from the actual data
+  const availableSubgraphs = useMemo(() => {
+    const names = new Set<string>();
+    for (const n of treeNodes) {
+      if (n.type === "subgraph-op" && n.subgraphName) {
+        names.add(n.subgraphName);
+      }
+    }
+    return [...names].sort();
+  }, [treeNodes]);
+
+  // Dynamic color map for subgraphs present in the data
+  const subgraphColorMap = useMemo(
+    () => buildSubgraphColorMap(availableSubgraphs),
+    [availableSubgraphs],
+  );
+
   // SLO-based filters
   const [sloExceededFilter, setSloExceededFilter] = useState(false);
   const toggleSloExceededFilter = useCallback(() => setSloExceededFilter((prev) => !prev), []);
@@ -719,7 +737,8 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
           Subgraphs {selectedSubgraphs.size > 0 && `(${selectedSubgraphs.size})`} {showSubgraphFilters ? "\u25BE" : "\u25B8"}
         </button>
         {showSubgraphFilters &&
-          Object.entries(SUBGRAPHS).map(([name, { color }]) => {
+          availableSubgraphs.map((name) => {
+            const color = subgraphColorMap.get(name) ?? DEFAULT_SUBGRAPH_COLOR;
             const isActive = selectedSubgraphs.has(name);
             const hasFilter = selectedSubgraphs.size > 0;
             return (
@@ -884,10 +903,10 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
                     ) : null}
                     {node.type === "subgraph-op" ? (
                       <span className={`flex items-center gap-1.5 ${node.cached ? "opacity-50" : ""}`}>
-                        {node.subgraphColor && (
+                        {(node.subgraphName || node.subgraphColor) && (
                           <span
                             className="w-2 h-2 rounded-full flex-shrink-0"
-                            style={{ backgroundColor: node.subgraphColor }}
+                            style={{ backgroundColor: (node.subgraphName && subgraphColorMap.get(node.subgraphName)) || node.subgraphColor || DEFAULT_SUBGRAPH_COLOR }}
                           />
                         )}
                         <span className="text-zinc-400">{node.name.replace("-subgraph", "")}</span>

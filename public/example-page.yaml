@@ -6,11 +6,32 @@
 #   - A map like { p50: 30, p90: 45, p99: 80 } for per-percentile values
 #     (missing percentiles interpolate from nearest lower or fall back to p50)
 #
+# Operations are keyed by subgraph name (e.g. "product-subgraph").
+#
 # The waterfall "fudges" fetch times: only the highest-variance boundary
 # uses the experience percentile; others stay near p50. Tree and subgraph
 # views show real per-metric percentile values.
 
 route: /products/[sku]
+
+subgraphs:
+  product-subgraph:
+    slo: 100
+  pricing-subgraph:
+    slo: 500
+  inventory-subgraph:
+  reviews-subgraph:
+    slo: 560
+  cms-subgraph:
+    slo: 150
+  reco-subgraph:
+    slo: 290
+  experimentation-subgraph:
+    slo: 65
+  media-subgraph:
+    slo: 90
+  user-subgraph:
+    slo: 150
 
 hydration_ms: { p50: 120, p75: 145, p90: 170, p99: 210 }
 navigation_timing:
@@ -46,14 +67,14 @@ boundaries:
     queries:
       getExperimentContext:
         ops:
-          experiment.context: { p50: 28, p90: 35, p99: 50 }
+          experimentation-subgraph: { p50: 28, p90: 35, p99: 50 }
 
     Nav:
       render_cost: 3
       queries:
         getNavigation:
           ops:
-            cms.navigation: { p50: 55, p90: 80, p99: 120 }
+            cms-subgraph: { p50: 55, p90: 80, p99: 120 }
 
       CartIndicator:
         csr: true
@@ -61,21 +82,21 @@ boundaries:
         queries:
           getUserCart:
             ops:
-              user.cart: { p50: 50, p90: 80, p99: 130 }
+              user-subgraph: { p50: 50, p90: 80, p99: 130 }
 
     Content:
       render_cost: 2
       queries:
         getContentLayout:
           ops:
-            cms.layout: { p50: 40, p90: 60, p99: 85 }
+            cms-subgraph: { p50: 40, p90: 60, p99: 85 }
 
       Breadcrumbs:
         render_cost: 2
         queries:
           getBreadcrumbs:
             ops:
-              category.tree: { p50: 35, p90: 50, p99: 75 }
+              cms-subgraph: { p50: 35, p90: 50, p99: 75 }
 
       Main.Hero:
         render_cost: 4
@@ -83,7 +104,7 @@ boundaries:
         queries:
           getHeroImage:
             ops:
-              media.heroImage: { p50: 30, p90: 38, p99: 55 }
+              media-subgraph: { p50: 30, p90: 38, p99: 55 }
 
         FavoriteButton:
           csr: true
@@ -91,14 +112,14 @@ boundaries:
           queries:
             getUserFavorites:
               ops:
-                user.favorites: { p50: 40, p90: 60, p99: 95 }
+                user-subgraph: { p50: 40, p90: 60, p99: 95 }
 
       Main.Thumbnails:
         render_cost: 3
         queries:
           getThumbnails:
             ops:
-              media.thumbnails: { p50: 40, p90: 55, p99: 70 }
+              media-subgraph: { p50: 40, p90: 55, p99: 70 }
 
       Main.Title:
         render_cost: 6
@@ -106,27 +127,23 @@ boundaries:
         queries:
           getProductInfo:
             ops:
-              product.core: { p50: 25, p90: 35, p99: 50 }
-              product.bullets: { p50: 30, p90: 45, p99: 65 }
+              product-subgraph: { p50: 30, p90: 45, p99: 65 }
 
       Main.Pricing:
         render_cost: 8
         queries:
           getProductPricing:
             ops:
-              pricing.current: { p50: 200, p90: 350, p99: 680 }
-              inventory.availability: { p50: 30, p90: 42, p99: 60 }
-              reviews.summary: { p50: 35, p90: 50, p99: 70 }
+              pricing-subgraph: { p50: 200, p90: 350, p99: 680 }
+              inventory-subgraph: { p50: 30, p90: 42, p99: 60 }
+              reviews-subgraph: { p50: 35, p90: 50, p99: 70 }
 
       Main.Bullets:
         render_cost: 3
         queries:
           getProductInfo:
             ops:
-              product.core:
-                duration: { p50: 25, p90: 35, p99: 50 }
-                cached: true
-              product.bullets:
+              product-subgraph:
                 duration: { p50: 30, p90: 45, p99: 65 }
                 cached: true
 
@@ -135,10 +152,7 @@ boundaries:
         queries:
           getProductInfo:
             ops:
-              product.core:
-                duration: { p50: 25, p90: 35, p99: 50 }
-                cached: true
-              product.bullets:
+              product-subgraph:
                 duration: { p50: 30, p90: 45, p99: 65 }
                 cached: true
 
@@ -150,16 +164,16 @@ boundaries:
         queries:
           getRecommendations:
             ops:
-              reco.personalized: { p50: 120, p90: 180, p99: 310 }
-              product.cards: { p50: 40, p90: 60, p99: 85 }
-              pricing.batch: { p50: 80, p90: 120, p99: 190 }
+              reco-subgraph: { p50: 120, p90: 180, p99: 310 }
+              product-subgraph: { p50: 40, p90: 60, p99: 85 }
+              pricing-subgraph: { p50: 80, p90: 120, p99: 190 }
 
       Reviews:
         render_cost: 6
         queries:
           getReviews:
             ops:
-              reviews.list: { p50: 200, p90: 350, p99: 680 }
+              reviews-subgraph: { p50: 200, p90: 350, p99: 680 }
 
         ReviewsQA:
           csr: true
@@ -167,11 +181,11 @@ boundaries:
           queries:
             getReviewsQA:
               ops:
-                reviews.qa: { p50: 120, p90: 200, p99: 350 }
+                reviews-subgraph: { p50: 120, p90: 200, p99: 350 }
 
     Footer:
       render_cost: 5
       queries:
         getFooter:
           ops:
-            cms.footer: { p50: 30, p90: 45, p99: 60 }
+            cms-subgraph: { p50: 30, p90: 45, p99: 60 }
