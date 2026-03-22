@@ -64,6 +64,7 @@ export interface MockTreeNode {
   subgraphName?: string;
   subgraphColor?: string;
   hasChildren: boolean;
+  phase?: "ssr" | "csr";
 }
 
 export interface MockTreeData {

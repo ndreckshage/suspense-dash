@@ -34,6 +34,7 @@ interface TreeItem {
   opName?: string;
   subgraphName?: string;
   lcpCritical?: boolean;
+  phase?: "ssr" | "csr";
 }
 
 /**
@@ -46,7 +47,7 @@ interface TreeItem {
  * e.g. "Layout.Content.Main.Hero" → "Layout.Content.Main"
  *      "Layout.Nav" → "Layout"
  *      "Layout" → null
- *      "csr.Cart" → "csr"
+ *      "Layout.Nav.CartIndicator" → "Layout.Nav"
  */
 function getParentPath(path: string): string | null {
   const idx = path.lastIndexOf(".");
@@ -61,11 +62,13 @@ function buildTreeFromMetrics(
   // 1. Collect unique boundary paths with median wall_start_ms
   const wallStartsByPath = new Map<string, number[]>();
   const lcpByPath = new Map<string, boolean>();
+  const phaseByPath = new Map<string, "ssr" | "csr">();
   for (const b of boundaries) {
     const list = wallStartsByPath.get(b.boundary_path) ?? [];
     list.push(b.wall_start_ms);
     wallStartsByPath.set(b.boundary_path, list);
     if (b.is_lcp_critical) lcpByPath.set(b.boundary_path, true);
+    phaseByPath.set(b.boundary_path, b.phase ?? "ssr");
   }
 
   const allPaths = [...wallStartsByPath.keys()];
@@ -136,6 +139,7 @@ function buildTreeFromMetrics(
         type: "boundary",
         boundaryPath,
         lcpCritical: lcpByPath.get(boundaryPath) ?? false,
+        phase: phaseByPath.get(boundaryPath),
       });
 
       // Add queries and subgraph ops under this boundary
@@ -150,6 +154,7 @@ function buildTreeFromMetrics(
             type: "query",
             boundaryPath,
             queryName,
+            phase: phaseByPath.get(boundaryPath),
           });
 
           const opsKey = `${boundaryPath}:${queryName}`;
@@ -165,6 +170,7 @@ function buildTreeFromMetrics(
                 queryName,
                 opName,
                 subgraphName,
+                phase: phaseByPath.get(boundaryPath),
               });
               opIdx++;
             }
@@ -199,7 +205,10 @@ const BOUNDARY_SLOS: Record<string, number> = {
   "Layout.Content.Main.AddToCart": 25,
   "Layout.Content.Carousels": 500,
   "Layout.Content.Reviews": 690,
+  "Layout.Content.Reviews.ReviewsQA": 400,
   "Layout.Footer": 125,
+  "Layout.Nav.CartIndicator": 200,
+  "Layout.Content.Main.Hero.FavoriteButton": 150,
 };
 
 interface TreeNode {
@@ -219,6 +228,7 @@ interface TreeNode {
   subgraphName?: string;
   subgraphColor?: string;
   hasChildren: boolean;
+  phase?: "ssr" | "csr";
 }
 
 function getDepth(item: TreeItem, depthMap: Map<string, number>): number {
@@ -342,6 +352,7 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
           lcpCritical: item.lcpCritical ?? false,
           cached: false,
           hasChildren: boundaryHasChildren.has(item.boundaryPath),
+          phase: item.phase,
         });
       } else if (item.type === "query") {
         const key = `${item.boundaryPath}:${item.queryName}`;
@@ -365,6 +376,7 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
           lcpCritical: false,
           cached: isCached,
           hasChildren: false,
+          phase: item.phase,
         });
       } else {
         const key = `${item.boundaryPath}:${item.queryName}:${item.opName}`;
@@ -393,6 +405,7 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
           subgraphName: item.subgraphName,
           subgraphColor,
           hasChildren: false,
+          phase: item.phase,
         });
       }
     }
@@ -420,6 +433,12 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
 
     return nodes;
   }, [treeStructure, boundaries, queries, subgraphOps, pctl, mock]);
+
+  // Phase filter — null means "show all", "ssr" or "csr" filters to that phase
+  const [phaseFilter, setPhaseFilter] = useState<"ssr" | "csr" | null>(null);
+  const togglePhaseFilter = useCallback((phase: "ssr" | "csr") => {
+    setPhaseFilter((prev) => (prev === phase ? null : phase));
+  }, []);
 
   // LCP path filter
   const [lcpFilter, setLcpFilter] = useState(false);
@@ -456,10 +475,30 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
     return withAncestors;
   }, [treeNodes]);
 
+  // Compute which boundaries match the phase filter
+  const phaseBoundaryPaths = useMemo(() => {
+    if (!phaseFilter) return null;
+    const matching = new Set<string>();
+    for (const n of treeNodes) {
+      // Treat undefined/missing phase as "ssr" (SSR boundaries don't explicitly set phase)
+      const nodePhase = n.phase ?? "ssr";
+      if (n.type === "boundary" && nodePhase === phaseFilter) {
+        matching.add(n.boundaryPath);
+        // Include ancestors so the tree structure stays visible
+        let candidate = getParentPath(n.boundaryPath);
+        while (candidate !== null) {
+          matching.add(candidate);
+          candidate = getParentPath(candidate);
+        }
+      }
+    }
+    return matching;
+  }, [phaseFilter, treeNodes]);
+
   // Compute which boundaries match the subgraph filter
   const filteredBoundaryPaths = useMemo(() => {
     const hasSubgraphFilter = selectedSubgraphs.size > 0;
-    if (!hasSubgraphFilter && !lcpFilter) return null; // no filter
+    if (!hasSubgraphFilter && !lcpFilter && !phaseFilter) return null; // no filter
 
     const subgraphMatching = new Set<string>();
     if (hasSubgraphFilter) {
@@ -479,17 +518,23 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
       }
     }
 
-    // Intersect filters if both active, otherwise use whichever is active
-    if (hasSubgraphFilter && lcpFilter) {
-      const intersection = new Set<string>();
-      for (const path of subgraphMatching) {
-        if (lcpBoundaryPaths.has(path)) intersection.add(path);
-      }
-      return intersection;
+    // Combine all active filters with intersection
+    let result: Set<string> | null = null;
+
+    if (hasSubgraphFilter) result = subgraphMatching;
+    if (lcpFilter) {
+      result = result
+        ? new Set([...result].filter((p) => lcpBoundaryPaths.has(p)))
+        : lcpBoundaryPaths;
     }
-    if (lcpFilter) return lcpBoundaryPaths;
-    return subgraphMatching;
-  }, [selectedSubgraphs, subgraphOps, lcpFilter, lcpBoundaryPaths, mock, treeNodes]);
+    if (phaseBoundaryPaths) {
+      result = result
+        ? new Set([...result].filter((p) => phaseBoundaryPaths.has(p)))
+        : phaseBoundaryPaths;
+    }
+
+    return result;
+  }, [selectedSubgraphs, subgraphOps, lcpFilter, lcpBoundaryPaths, phaseFilter, phaseBoundaryPaths, mock, treeNodes]);
 
   // Call count summary stats (uncached = actual network calls)
   const callSummary = useMemo(() => {
@@ -567,6 +612,29 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
       <div className="flex flex-wrap items-center gap-x-1 gap-y-1 mb-2 text-xs">
         <span className="text-zinc-600 mr-1">Filter:</span>
         <button
+          onClick={() => togglePhaseFilter("ssr")}
+          className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border transition-all ${
+            phaseFilter === "ssr"
+              ? "border-emerald-500 text-emerald-300 bg-emerald-500/10"
+              : "border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50"
+          }`}
+        >
+          <span className="w-2 h-2 rounded-full flex-shrink-0 bg-emerald-400" />
+          Server
+        </button>
+        <button
+          onClick={() => togglePhaseFilter("csr")}
+          className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border transition-all ${
+            phaseFilter === "csr"
+              ? "border-violet-500 text-violet-300 bg-violet-500/10"
+              : "border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50"
+          }`}
+        >
+          <span className="w-2 h-2 rounded-full flex-shrink-0 bg-violet-400" />
+          Client
+        </button>
+        <span className="text-zinc-800 mx-0.5">|</span>
+        <button
           onClick={toggleLcpFilter}
           className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border transition-all ${
             lcpFilter
@@ -601,9 +669,9 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
             </button>
           );
         })}
-        {(selectedSubgraphs.size > 0 || lcpFilter) && (
+        {(selectedSubgraphs.size > 0 || lcpFilter || phaseFilter) && (
           <button
-            onClick={() => { clearSubgraphFilter(); setLcpFilter(false); }}
+            onClick={() => { clearSubgraphFilter(); setLcpFilter(false); setPhaseFilter(null); }}
             className="text-zinc-500 hover:text-zinc-300 ml-2 underline"
           >
             Clear
@@ -766,6 +834,11 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
                     {node.lcpCritical && (
                       <span className="ml-1.5 text-blue-400 text-xs" title="LCP Critical">
                         LCP
+                      </span>
+                    )}
+                    {node.type === "boundary" && node.phase === "csr" && (
+                      <span className="ml-1.5 text-violet-400 text-xs" title="Client Component">
+                        CSR
                       </span>
                     )}
                   </div>

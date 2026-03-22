@@ -12,7 +12,7 @@ export function FavoriteButton() {
   const ctx = useCsrRequestContext();
   const queryStatus = useCsrQuerySimulation(
     "getUserFavorites",
-    "csr.Favorites",
+    "Layout.Content.Main.Hero.FavoriteButton",
     ctx?.requestId ?? "",
     ctx?.requestStartTs ?? 0,
   );

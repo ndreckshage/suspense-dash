@@ -11,7 +11,7 @@ export function CartIndicator() {
   const ctx = useCsrRequestContext();
   const status = useCsrQuerySimulation(
     "getUserCart",
-    "csr.Cart",
+    "Layout.Nav.CartIndicator",
     ctx?.requestId ?? "",
     ctx?.requestStartTs ?? 0,
   );

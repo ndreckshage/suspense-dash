@@ -106,8 +106,8 @@ const BOUNDARY_COLORS: Record<string, string> = {
   Reviews: "rgb(34, 197, 94)",
   Footer: "rgb(100, 116, 139)",
   // CSR boundaries
-  Cart: "rgb(168, 85, 247)",
-  Favorites: "rgb(168, 85, 247)",
+  CartIndicator: "rgb(168, 85, 247)",
+  FavoriteButton: "rgb(168, 85, 247)",
   ReviewsQA: "rgb(34, 197, 94)",
 };
 

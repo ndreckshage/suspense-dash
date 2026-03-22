@@ -55,6 +55,14 @@ boundaries:
           ops:
             cms.navigation: { p50: 55, p90: 80, p99: 120 }
 
+      CartIndicator:
+        csr: true
+        render_cost: 2
+        queries:
+          getUserCart:
+            ops:
+              user.cart: { p50: 50, p90: 80, p99: 130 }
+
     Content:
       render_cost: 2
       queries:
@@ -76,6 +84,14 @@ boundaries:
           getHeroImage:
             ops:
               media.heroImage: { p50: 30, p90: 38, p99: 55 }
+
+        FavoriteButton:
+          csr: true
+          render_cost: 1
+          queries:
+            getUserFavorites:
+              ops:
+                user.favorites: { p50: 40, p90: 60, p99: 95 }
 
       Main.Thumbnails:
         render_cost: 3
@@ -145,31 +161,17 @@ boundaries:
             ops:
               reviews.list: { p50: 200, p90: 350, p99: 680 }
 
+        ReviewsQA:
+          csr: true
+          render_cost: 4
+          queries:
+            getReviewsQA:
+              ops:
+                reviews.qa: { p50: 120, p90: 200, p99: 350 }
+
     Footer:
       render_cost: 5
       queries:
         getFooter:
           ops:
             cms.footer: { p50: 30, p90: 45, p99: 60 }
-
-csr_boundaries:
-  CartIndicator:
-    render_cost: 2
-    queries:
-      getUserCart:
-        ops:
-          user.cart: { p50: 50, p90: 80, p99: 130 }
-
-  FavoriteButton:
-    render_cost: 1
-    queries:
-      getUserFavorites:
-        ops:
-          user.favorites: { p50: 40, p90: 60, p99: 95 }
-
-  ReviewsQA:
-    render_cost: 4
-    queries:
-      getReviewsQA:
-        ops:
-          reviews.qa: { p50: 120, p90: 200, p99: 350 }
