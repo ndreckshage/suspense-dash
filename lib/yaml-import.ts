@@ -13,9 +13,6 @@
 
 import { parse as parseYaml } from "yaml";
 import type { NavigationTiming } from "./client-metrics-store";
-import {
-  SUBGRAPH_OPERATIONS,
-} from "./gql-federation";
 import { buildSubgraphColorMap, DEFAULT_SUBGRAPH_COLOR } from "./subgraph-colors";
 import type {
   MockDashboardData,
@@ -73,8 +70,13 @@ interface YamlLoAFEntry {
   scripts?: YamlLoAFScript[];
 }
 
+interface YamlSubgraph {
+  slo?: number;
+}
+
 interface YamlPage {
   route: string;
+  subgraphs?: Record<string, YamlSubgraph>;
   hydration_ms?: PctlValue;
   navigation_timing?: YamlNavTiming;
   loaf_entries?: YamlLoAFEntry[];
@@ -96,8 +98,6 @@ const PCTLS = [50, 75, 90, 95, 99];
 // ---- Helpers ----
 
 function resolveSubgraph(opName: string): string {
-  const known = SUBGRAPH_OPERATIONS[opName];
-  if (known) return known.subgraph;
   const slashIdx = opName.indexOf("/");
   if (slashIdx > 0) return opName.slice(0, slashIdx);
   return "unknown-subgraph";
@@ -422,6 +422,7 @@ function computeTree(
   csrRoots: BoundaryInfo[],
   pctl: number,
   colorMap: Map<string, string>,
+  sloMap: Map<string, number>,
 ): MockTreeData {
   const allBoundaries = [...flattenTree(ssrRoots), ...flattenTree(csrRoots)];
   const allPaths = new Set(allBoundaries.map((b) => b.path));
@@ -555,7 +556,7 @@ function computeTree(
 
       let oi = 0;
       for (const [sgName, sgData] of opsBySubgraph) {
-        const sgSlo = 0;
+        const sgSlo = sloMap.get(sgName) ?? 0;
         const subgraphColor = colorMap.get(sgName) ?? DEFAULT_SUBGRAPH_COLOR;
         const maxDuration = Math.max(0, ...sgData.durations);
 
@@ -611,6 +612,7 @@ function computeSubgraphs(
   csrRoots: BoundaryInfo[],
   pctl: number,
   colorMap: Map<string, string>,
+  sloMap: Map<string, number>,
 ): MockSubgraphData {
   const allBoundaries = [...flattenTree(ssrRoots), ...flattenTree(csrRoots)];
 
@@ -695,6 +697,7 @@ function computeSubgraphs(
     rows.push({
       name: sgName,
       color,
+      sloMs: sloMap.get(sgName) ?? 0,
       callsPerReq: sgUncachedCount,
       durationPctl: sgMaxDuration,
       operations,
@@ -785,6 +788,14 @@ export function parseYamlDashboard(yamlString: string): MockDashboardData {
   }
   const subgraphColorMap = buildSubgraphColorMap(collectSubgraphNames(allRoots));
 
+  // Build subgraph SLO map from YAML subgraphs section
+  const subgraphSloMap = new Map<string, number>();
+  if (doc.subgraphs) {
+    for (const [name, cfg] of Object.entries(doc.subgraphs)) {
+      subgraphSloMap.set(name, cfg?.slo ?? 0);
+    }
+  }
+
   // Compute pre-computed data for each percentile
   const waterfall: Record<number, MockWaterfallData> = {};
   const tree: Record<number, MockTreeData> = {};
@@ -822,8 +833,8 @@ export function parseYamlDashboard(yamlString: string): MockDashboardData {
 
     waterfall[pctl] = computeWaterfall(ssrRoots, csrRoots, pctl, hydrationMs, navTiming, loafEntries);
     // Tree uses the full (un-split) roots so CSR boundaries stay nested under parents
-    tree[pctl] = computeTree(allRoots, [], pctl, subgraphColorMap);
-    subgraphs[pctl] = computeSubgraphs(ssrRoots, csrRoots, pctl, subgraphColorMap);
+    tree[pctl] = computeTree(allRoots, [], pctl, subgraphColorMap, subgraphSloMap);
+    subgraphs[pctl] = computeSubgraphs(ssrRoots, csrRoots, pctl, subgraphColorMap, subgraphSloMap);
   }
 
   return { route: doc.route, waterfall, tree, subgraphs };

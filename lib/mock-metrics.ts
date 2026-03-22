@@ -86,6 +86,7 @@ export interface MockOperationDetail {
 export interface MockSubgraphRow {
   name: string;
   color: string;
+  sloMs: number;
   callsPerReq: number;
   durationPctl: number;
   operations: MockOperationDetail[];

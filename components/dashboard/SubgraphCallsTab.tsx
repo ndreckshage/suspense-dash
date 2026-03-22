@@ -89,7 +89,7 @@ export function SubgraphCallsTab({ queries, subgraphOps, pctl, mock }: Props) {
           color: r.color,
           callsPerReq: r.callsPerReq,
           durationPctl: r.durationPctl,
-          sloMs: 0,
+          sloMs: r.sloMs ?? 0,
           callers: [...callerMap.entries()].map(([key, c]) => ({
             ...c,
             durationPctl: percentile(callerDurations.get(key) ?? [], pctl),
