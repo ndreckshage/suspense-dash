@@ -9,6 +9,7 @@ import { SUBGRAPHS, type SubgraphName } from "@/lib/gql-federation";
 import { percentile } from "@/lib/percentile";
 import type { MockSubgraphData } from "@/lib/mock-metrics";
 import { buildSubgraphColorMap, DEFAULT_SUBGRAPH_COLOR } from "@/lib/subgraph-colors";
+import { TabDescription } from "./TabDescription";
 
 interface Props {
   queries: QueryMetric[];
@@ -206,6 +207,25 @@ export function SubgraphCallsTab({ queries, subgraphOps, pctl, mock }: Props) {
 
   return (
     <div className="space-y-4">
+      <TabDescription title="What does this measure?" storageKey="subgraphs">
+        <p>
+          This view counts how many times each backend service (subgraph) is called to render a single page
+          load — <strong className="text-zinc-300">before any user interaction</strong> (scroll, click, tap).
+          Only initialization traffic is included; lazy-loaded content triggered by scrolling is excluded.
+        </p>
+        <p>
+          <strong className="text-zinc-300">Calls / request</strong> is the number of times this subgraph is
+          hit per page load. Multiple boundaries may call the same service — expanding a row shows which
+          queries and boundaries are responsible. High call counts may indicate an opportunity to optimize
+          the query plan, including reviewing <strong className="text-zinc-300">@key</strong> usage across
+          subgraphs to reduce entity resolution round-trips, or batching requests.
+        </p>
+        <p>
+          <strong className="text-zinc-300">Duration</strong> is the response time at the selected percentile.
+          Compare this against the <strong className="text-zinc-300">SLO</strong> column — if duration exceeds
+          the SLO, the service is the bottleneck. Services without a defined SLO are flagged so teams can set one.
+        </p>
+      </TabDescription>
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-x-1 gap-y-1 text-xs">
         <span className="text-zinc-600 mr-1">Filter:</span>
@@ -255,7 +275,7 @@ export function SubgraphCallsTab({ queries, subgraphOps, pctl, mock }: Props) {
         )}
         {summary.dedupedPerReq > 0 && (
           <div>
-            <span className="text-zinc-500">Saved by dedup: </span>
+            <span className="text-zinc-500">Saved by React dedup: </span>
             <span className="text-cyan-500 font-medium">{summary.dedupedPerReq}</span>
           </div>
         )}

@@ -78,6 +78,7 @@ interface YamlPage {
   route: string;
   subgraphs?: Record<string, YamlSubgraph>;
   hydration_ms?: PctlValue;
+  initialization_ms?: PctlValue;
   navigation_timing?: YamlNavTiming;
   loaf_entries?: YamlLoAFEntry[];
   boundaries: Record<string, YamlBoundary>;
@@ -260,6 +261,7 @@ function computeWaterfall(
   csrBoundaries: BoundaryInfo[],
   pctl: number,
   hydrationMs: number,
+  initializationMs: number,
   navTiming: NavigationTiming | null,
   loafEntries: MockLoAFEntry[],
 ): MockWaterfallData {
@@ -409,7 +411,7 @@ function computeWaterfall(
     }
   }
 
-  return { ssrTimings, csrTimings, hydrationMs, navigationTiming: navTiming, loafEntries };
+  return { ssrTimings, csrTimings, hydrationMs, initializationMs, navigationTiming: navTiming, loafEntries };
 }
 
 // ---- Tree computation ----
@@ -800,6 +802,9 @@ export function parseYamlDashboard(yamlString: string): MockDashboardData {
 
   for (const pctl of PCTLS) {
     const hydrationMs = Math.round(atPctl(doc.hydration_ms, pctl));
+    const initializationMs = doc.initialization_ms
+      ? Math.round(atPctl(doc.initialization_ms, pctl))
+      : 0;
 
     let navTiming: NavigationTiming | null = null;
     if (doc.navigation_timing) {
@@ -828,7 +833,7 @@ export function parseYamlDashboard(yamlString: string): MockDashboardData {
     // Derive loafCount from entries
     if (navTiming) navTiming.loafCount = loafEntries.length;
 
-    waterfall[pctl] = computeWaterfall(ssrRoots, csrRoots, pctl, hydrationMs, navTiming, loafEntries);
+    waterfall[pctl] = computeWaterfall(ssrRoots, csrRoots, pctl, hydrationMs, initializationMs, navTiming, loafEntries);
     // Tree uses the full (un-split) roots so CSR boundaries stay nested under parents
     tree[pctl] = computeTree(allRoots, [], pctl, subgraphColorMap, subgraphSloMap);
     subgraphs[pctl] = computeSubgraphs(ssrRoots, csrRoots, pctl, subgraphColorMap, subgraphSloMap);

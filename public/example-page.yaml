@@ -34,6 +34,7 @@ subgraphs:
     slo: 150
 
 hydration_ms: { p50: 120, p75: 145, p90: 170, p99: 210 }
+initialization_ms: { p50: 320, p75: 380, p90: 450, p99: 580 }
 navigation_timing:
   dom_interactive: { p50: 90, p75: 105, p90: 120, p99: 150 }
   dom_content_loaded: { p50: 110, p75: 130, p90: 155, p99: 185 }

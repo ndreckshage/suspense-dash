@@ -41,6 +41,7 @@ export interface MockWaterfallData {
   ssrTimings: WaterfallTiming[];
   csrTimings: WaterfallCsrTiming[];
   hydrationMs: number;
+  initializationMs: number;
   navigationTiming: NavigationTiming | null;
   loafEntries: MockLoAFEntry[];
 }

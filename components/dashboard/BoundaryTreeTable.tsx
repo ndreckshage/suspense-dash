@@ -13,6 +13,7 @@ import {
 import { percentile, median as medianUtil } from "@/lib/percentile";
 import type { MockTreeData } from "@/lib/mock-metrics";
 import { buildSubgraphColorMap, DEFAULT_SUBGRAPH_COLOR } from "@/lib/subgraph-colors";
+import { TabDescription } from "./TabDescription";
 
 interface Props {
   boundaries: BoundaryMetric[];
@@ -663,6 +664,33 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
 
   return (
     <div className="overflow-x-auto">
+      <TabDescription title="What does this measure?" storageKey="tree">
+        <p>
+          This tree maps directly to the <strong className="text-zinc-300">React Suspense boundaries</strong> in
+          the page. Each boundary is an independent loading unit — it can fetch data and render without waiting
+          for the rest of the page. Nested under each boundary you&apos;ll see the GraphQL query it runs, and
+          under each query, the individual <strong className="text-zinc-300">subgraph operations</strong> (the
+          backend services that supply the data).
+        </p>
+        <p>
+          Use the latency column to compare actual response times against each service&apos;s
+          <strong className="text-zinc-300"> SLO</strong> (service-level objective). Red means the service
+          exceeded its SLO at this percentile. If no SLO is defined, the cell shows &quot;—&quot;.
+        </p>
+        <p>
+          <strong className="text-zinc-300">Cache</strong> indicators show whether a subgraph call was
+          deduplicated by React&apos;s request memoization (i.e. multiple components requested the same data
+          and React served it from an in-flight or completed fetch). This is <em>not</em> a backend/Redis
+          cache — it&apos;s React&apos;s built-in deduplication within a single render pass. Deduplicated
+          operations have near-zero latency and don&apos;t count toward the service&apos;s performance budget.
+        </p>
+        <p>
+          <strong className="text-zinc-300">Server</strong> rows ran during SSR (HTML streaming).
+          <strong className="text-zinc-300"> Client</strong> rows ran after hydration in the browser. Client-side
+          fetches add to time-to-interactive and compete for the main thread during initialization, which
+          can increase contention and delay interactivity.
+        </p>
+      </TabDescription>
       {/* Filter chips */}
       <div className="flex flex-wrap items-center gap-x-1 gap-y-1 mb-2 text-xs">
         <span className="text-zinc-600 mr-1">Filter:</span>
