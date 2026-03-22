@@ -4,6 +4,7 @@ import { useMemo, useState, useCallback, type ReactNode } from "react";
 import type { BoundaryMetric, QueryMetric } from "@/lib/metrics-store";
 import type { LoAFEntry, NavigationTiming } from "@/lib/client-metrics-store";
 import type { MockWaterfallData } from "@/lib/mock-metrics";
+import { TabDescription } from "./TabDescription";
 
 function Tooltip({ content, children, className, style }: { content: ReactNode; children: ReactNode; className?: string; style?: React.CSSProperties }) {
   const [show, setShow] = useState(false);
@@ -386,6 +387,26 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
 
   return (
     <div className="space-y-6 overflow-x-auto overflow-y-hidden md:overflow-x-hidden" style={{ minWidth: 0 }}>
+      <TabDescription title="What does this measure?">
+        <p>
+          This waterfall shows everything that happens to render the page <strong className="text-zinc-300">before
+          any user interaction</strong> (scroll, click, tap). Think of it like a Core Web Vitals measurement
+          window — once the user interacts, we stop the clock.
+        </p>
+        <p>
+          <strong className="text-zinc-300">Hydration</strong> is the time React spends making server-rendered
+          HTML interactive. During hydration, the page looks loaded but buttons and links may not respond yet.
+          <strong className="text-zinc-300"> Initialization</strong> covers everything after hydration — client-side
+          data fetches, Suspense boundaries resolving, and components rendering with real data.
+        </p>
+        <p>
+          Each bar represents a <strong className="text-zinc-300">Suspense boundary</strong> — an independent
+          section of the page that can load and display its content on its own timeline. The bar width shows
+          how long that section&apos;s data fetch took. The position shows when it started relative to the page
+          request. The <strong className="text-zinc-300">LCP data ready</strong> marker shows when the largest
+          visible content had all its data.
+        </p>
+      </TabDescription>
       <div className="min-w-[600px] md:min-w-0 space-y-6 overflow-hidden">
       {/* Time axis + marker labels */}
       <div>
