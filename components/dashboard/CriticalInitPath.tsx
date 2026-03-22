@@ -114,7 +114,7 @@ const BOUNDARY_COLORS: Record<string, string> = {
 };
 
 export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, loafEntries, navigationTimings, mock }: Props) {
-  const [timelineScope, setTimelineScope] = useState<"lcp" | "full">("full");
+  const [timelineScope, setTimelineScope] = useState<"lcp" | "ssr" | "full">("full");
   // Separate SSR and CSR metrics
   const ssrBoundaries = useMemo(
     () => boundaries.filter((b) => b.phase !== "csr"),
@@ -350,18 +350,22 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
     const ssrEnds = timings.map((t) => t.wallStart + t.total);
 
     if (timelineScope === "lcp") {
-      // LCP-only: cap timeline right after LCP render
+      // LCP-only: cap timeline right after LCP render (exclude non-LCP SSR tail)
+      const totalMs = Math.max(lcpRendered, 1);
+      return Math.ceil(totalMs * 1.10);
+    }
+
+    if (timelineScope === "ssr") {
+      // SSR-only: cap timeline at the last SSR boundary end
       const totalMs = Math.max(...ssrEnds, lcpRendered, 1);
       return Math.ceil(totalMs * 1.10);
     }
 
-    // Full scope: include CSR + init complete, but cap there (not at LoAF end)
-    const csrMax = hydrationMs > 0
-      ? Math.min(csrInitComplete, hydrationMs + 3000)
-      : csrInitComplete;
-    const totalMs = Math.max(...ssrEnds, lcpRendered, csrMax, initializationMs, 1);
+    // Full scope: cap at ~10% after the latest init milestone
+    const initEnd = Math.max(csrInitComplete, initializationMs);
+    const totalMs = Math.max(...ssrEnds, lcpRendered, initEnd, 1);
     return Math.ceil(totalMs * 1.10);
-  }, [timings, lcpRendered, csrInitComplete, hydrationMs, initializationMs, timelineScope]);
+  }, [timings, lcpRendered, csrInitComplete, initializationMs, timelineScope]);
 
   if (timings.length === 0) {
     return (
@@ -435,6 +439,16 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
           }`}
         >
           LCP Only
+        </button>
+        <button
+          onClick={() => setTimelineScope("ssr")}
+          className={`px-2 py-0.5 rounded-full border transition-all ${
+            timelineScope === "ssr"
+              ? "border-emerald-500 text-emerald-300 bg-emerald-500/10"
+              : "border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50"
+          }`}
+        >
+          SSR Only
         </button>
         <button
           onClick={() => setTimelineScope("full")}
