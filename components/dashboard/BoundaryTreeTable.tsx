@@ -47,7 +47,7 @@ interface TreeItem {
  * e.g. "Layout.Content.Main.Hero" → "Layout.Content.Main"
  *      "Layout.Nav" → "Layout"
  *      "Layout" → null
- *      "csr.Cart" → "csr"
+ *      "Layout.Nav.CartIndicator" → "Layout.Nav"
  */
 function getParentPath(path: string): string | null {
   const idx = path.lastIndexOf(".");
@@ -68,7 +68,7 @@ function buildTreeFromMetrics(
     list.push(b.wall_start_ms);
     wallStartsByPath.set(b.boundary_path, list);
     if (b.is_lcp_critical) lcpByPath.set(b.boundary_path, true);
-    if (b.phase) phaseByPath.set(b.boundary_path, b.phase);
+    phaseByPath.set(b.boundary_path, b.phase ?? "ssr");
   }
 
   const allPaths = [...wallStartsByPath.keys()];
@@ -480,7 +480,9 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
     if (!phaseFilter) return null;
     const matching = new Set<string>();
     for (const n of treeNodes) {
-      if (n.type === "boundary" && n.phase === phaseFilter) {
+      // Treat undefined/missing phase as "ssr" (SSR boundaries don't explicitly set phase)
+      const nodePhase = n.phase ?? "ssr";
+      if (n.type === "boundary" && nodePhase === phaseFilter) {
         matching.add(n.boundaryPath);
         // Include ancestors so the tree structure stays visible
         let candidate = getParentPath(n.boundaryPath);

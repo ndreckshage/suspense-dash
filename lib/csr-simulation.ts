@@ -49,7 +49,7 @@ function sleep(ms: number): Promise<void> {
  * Records metrics (boundary, query, subgraph ops) to the client metrics store.
  *
  * @param queryName - The GQL query name (must exist in GQL_QUERIES)
- * @param boundaryPath - The boundary path for metrics (e.g. "csr.Cart")
+ * @param boundaryPath - The boundary path for metrics (e.g. "Layout.Nav.CartIndicator")
  * @param requestId - The SSR request ID to correlate with
  * @param requestStartTs - The original request start timestamp
  * @param delayMs - Optional delay before firing the query (default 0)

@@ -38,7 +38,7 @@ export function ReviewsQA() {
   const ctx = useCsrRequestContext();
   const status = useCsrQuerySimulation(
     "getReviewsQA",
-    "csr.ReviewsQA",
+    "Layout.Content.Reviews.ReviewsQA",
     ctx?.requestId ?? "",
     ctx?.requestStartTs ?? 0,
     200, // stagger delay

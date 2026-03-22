@@ -105,10 +105,7 @@ const BOUNDARY_COLORS: Record<string, string> = {
   Carousels: "rgb(236, 72, 153)",
   Reviews: "rgb(34, 197, 94)",
   Footer: "rgb(100, 116, 139)",
-  // CSR boundaries (live mode names)
-  Cart: "rgb(168, 85, 247)",
-  Favorites: "rgb(168, 85, 247)",
-  // CSR boundaries (YAML mock names)
+  // CSR boundaries
   CartIndicator: "rgb(168, 85, 247)",
   FavoriteButton: "rgb(168, 85, 247)",
   ReviewsQA: "rgb(34, 197, 94)",
