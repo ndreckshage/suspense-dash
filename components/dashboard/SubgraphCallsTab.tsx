@@ -21,6 +21,7 @@ interface CallerDetail {
   queryName: string;
   boundary: string;
   isClient: boolean;
+  durationPctl: number;
 }
 
 interface SubgraphSummary {
@@ -56,8 +57,9 @@ export function SubgraphCallsTab({ queries, subgraphOps, pctl, mock }: Props) {
     // Mock data path — use pre-computed values directly
     if (mock?.[pctl]) {
       const rows: SubgraphSummary[] = mock[pctl].rows.map((r) => {
-        // Build callers from mock operation details
-        const callerMap = new Map<string, CallerDetail>();
+        // Build callers from mock operation details, collecting durations per caller
+        const callerDurations = new Map<string, number[]>();
+        const callerMap = new Map<string, Omit<CallerDetail, "durationPctl">>();
         for (const op of r.operations) {
           for (let i = 0; i < op.queryNames.length; i++) {
             const qn = op.queryNames[i];
@@ -66,6 +68,9 @@ export function SubgraphCallsTab({ queries, subgraphOps, pctl, mock }: Props) {
             if (!callerMap.has(key)) {
               callerMap.set(key, { queryName: qn, boundary: bp, isClient: op.isClient });
             }
+            const durations = callerDurations.get(key) ?? [];
+            durations.push(op.durationPctl);
+            callerDurations.set(key, durations);
           }
         }
         return {
@@ -74,7 +79,10 @@ export function SubgraphCallsTab({ queries, subgraphOps, pctl, mock }: Props) {
           callsPerReq: r.callsPerReq,
           durationPctl: r.durationPctl,
           sloMs: SUBGRAPHS[r.name as SubgraphName]?.sloMs ?? 0,
-          callers: [...callerMap.values()],
+          callers: [...callerMap.entries()].map(([key, c]) => ({
+            ...c,
+            durationPctl: percentile(callerDurations.get(key) ?? [], pctl),
+          })),
           hasClientCalls: r.operations.some((op) => op.isClient),
         };
       });
@@ -126,16 +134,22 @@ export function SubgraphCallsTab({ queries, subgraphOps, pctl, mock }: Props) {
       const sloMs = SUBGRAPHS[sgName as SubgraphName]?.sloMs ?? 0;
       const sgAllOps = allBySubgraph.get(sgName) ?? [];
 
-      // Build unique callers (query + boundary pairs)
-      const callerMap = new Map<string, CallerDetail>();
+      // Build unique callers (query + boundary pairs) with per-caller durations
+      const callerBase = new Map<string, Omit<CallerDetail, "durationPctl">>();
+      const callerDurations = new Map<string, number[]>();
       for (const op of sgAllOps) {
         const key = `${op.queryName}:${op.boundary_path}`;
-        if (!callerMap.has(key)) {
-          callerMap.set(key, {
+        if (!callerBase.has(key)) {
+          callerBase.set(key, {
             queryName: op.queryName,
             boundary: op.boundary_path,
             isClient: op.phase === "csr",
           });
+        }
+        if (!op.cached) {
+          const durs = callerDurations.get(key) ?? [];
+          durs.push(op.duration_ms);
+          callerDurations.set(key, durs);
         }
       }
 
@@ -147,7 +161,10 @@ export function SubgraphCallsTab({ queries, subgraphOps, pctl, mock }: Props) {
         callsPerReq: Math.round((sgUncachedOps.length / numRequests) * 10) / 10,
         durationPctl: percentile(durations, pctl),
         sloMs,
-        callers: [...callerMap.values()],
+        callers: [...callerBase.entries()].map(([key, c]) => ({
+          ...c,
+          durationPctl: percentile(callerDurations.get(key) ?? [], pctl),
+        })),
         hasClientCalls: sgAllOps.some((o) => o.phase === "csr"),
       });
     }
@@ -374,7 +391,10 @@ function SubgraphRow({
                 )}
               </div>
             </td>
-            <td colSpan={4} />
+            <td className="text-right py-1 px-2 text-zinc-500 text-xs">
+              {caller.durationPctl > 0 ? `${caller.durationPctl}ms` : ""}
+            </td>
+            <td colSpan={3} />
           </tr>
         ))}
     </>
