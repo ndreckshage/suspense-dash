@@ -678,14 +678,17 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
           exceeded its SLO at this percentile. If no SLO is defined, the cell shows &quot;—&quot;.
         </p>
         <p>
-          <strong className="text-zinc-300">Cache</strong> indicators show whether a subgraph response came from
-          cache (full hit) or required a fresh fetch. Cached operations have near-zero latency and don&apos;t
-          count toward the service&apos;s performance budget.
+          <strong className="text-zinc-300">Cache</strong> indicators show whether a subgraph call was
+          deduplicated by React&apos;s request memoization (i.e. multiple components requested the same data
+          and React served it from an in-flight or completed fetch). This is <em>not</em> a backend/Redis
+          cache — it&apos;s React&apos;s built-in deduplication within a single render pass. Deduplicated
+          operations have near-zero latency and don&apos;t count toward the service&apos;s performance budget.
         </p>
         <p>
           <strong className="text-zinc-300">Server</strong> rows ran during SSR (HTML streaming).
           <strong className="text-zinc-300"> Client</strong> rows ran after hydration in the browser. Client-side
-          fetches add to time-to-interactive — look for opportunities to move them server-side.
+          fetches add to time-to-interactive and compete for the main thread during initialization, which
+          can increase contention and delay interactivity.
         </p>
       </TabDescription>
       {/* Filter chips */}

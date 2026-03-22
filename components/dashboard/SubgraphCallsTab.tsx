@@ -216,8 +216,9 @@ export function SubgraphCallsTab({ queries, subgraphOps, pctl, mock }: Props) {
         <p>
           <strong className="text-zinc-300">Calls / request</strong> is the number of times this subgraph is
           hit per page load. Multiple boundaries may call the same service — expanding a row shows which
-          queries and boundaries are responsible. High call counts may indicate an opportunity to deduplicate
-          or batch requests.
+          queries and boundaries are responsible. High call counts may indicate an opportunity to optimize
+          the query plan, including reviewing <strong className="text-zinc-300">@key</strong> usage across
+          subgraphs to reduce entity resolution round-trips, or batching requests.
         </p>
         <p>
           <strong className="text-zinc-300">Duration</strong> is the response time at the selected percentile.
@@ -274,7 +275,7 @@ export function SubgraphCallsTab({ queries, subgraphOps, pctl, mock }: Props) {
         )}
         {summary.dedupedPerReq > 0 && (
           <div>
-            <span className="text-zinc-500">Saved by dedup: </span>
+            <span className="text-zinc-500">Saved by React dedup: </span>
             <span className="text-cyan-500 font-medium">{summary.dedupedPerReq}</span>
           </div>
         )}

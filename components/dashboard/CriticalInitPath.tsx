@@ -169,6 +169,12 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
     return hydrationTimes[representativeRequestId] ?? 0;
   }, [hydrationTimes, representativeRequestId, pctl, mock]);
 
+  // Initialization time (hydration + client-side effects) — from mock data
+  const initializationMs = useMemo(() => {
+    if (mock?.[pctl]) return mock[pctl].initializationMs ?? 0;
+    return 0;
+  }, [pctl, mock]);
+
   // LoAF entries — from mock or representative load
   const aggregatedLoaf = useMemo(() => {
     if (mock?.[pctl]) return mock[pctl].loafEntries ?? [];
@@ -396,8 +402,10 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
         <p>
           <strong className="text-zinc-300">Hydration</strong> is the time React spends making server-rendered
           HTML interactive. During hydration, the page looks loaded but buttons and links may not respond yet.
-          <strong className="text-zinc-300"> Initialization</strong> covers everything after hydration — client-side
-          data fetches, Suspense boundaries resolving, and components rendering with real data.
+          After hydration completes, <strong className="text-zinc-300">client-side effects</strong> run —
+          data fetches from CSR Suspense boundaries, useEffect callbacks, and components rendering with real data.
+          Note that client-side effects compete for the main thread, so more CSR work can increase contention
+          and delay interactivity. The waterfall covers both phases: server-side streaming and post-hydration effects.
         </p>
         <p>
           Each bar represents a <strong className="text-zinc-300">Suspense boundary</strong> — an independent
@@ -939,6 +947,12 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
           <div>
             <span className="text-zinc-500">Hydration: </span>
             <span className="text-amber-400">{Math.round(hydrationMs)}ms</span>
+          </div>
+        )}
+        {initializationMs > 0 && (
+          <div>
+            <span className="text-zinc-500">Effects complete: </span>
+            <span className="text-orange-400">{Math.round(initializationMs)}ms</span>
           </div>
         )}
         {navTiming && (
