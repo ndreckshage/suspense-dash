@@ -13,6 +13,7 @@ export default async function DashboardPage({
   const initialTab: TabKey = TAB_KEYS.includes(tab as TabKey)
     ? (tab as TabKey)
     : "lcp";
+  const run = typeof params.run === "string" ? params.run : undefined;
 
-  return <DashboardClient initialTab={initialTab} />;
+  return <DashboardClient initialTab={initialTab} runUrl={run} />;
 }

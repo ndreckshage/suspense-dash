@@ -9,6 +9,7 @@ import {
   type ClientMetrics,
 } from "@/lib/client-metrics-store";
 import type { MockDashboardData } from "@/lib/mock-metrics";
+import { parseYamlDashboard } from "@/lib/yaml-import";
 import { YamlUpload } from "@/components/dashboard/YamlUpload";
 
 const PERCENTILE_OPTIONS = [50, 75, 90, 95, 99] as const;
@@ -16,30 +17,22 @@ const PERCENTILE_OPTIONS = [50, 75, 90, 95, 99] as const;
 const TAB_KEYS = ["lcp", "tree", "subgraphs"] as const;
 type TabKey = (typeof TAB_KEYS)[number];
 
-const PAGE_TYPES = [
-  { value: "pdp", label: "PDP", route: "/products/[sku]", enabled: true },
-  {
-    value: "search",
-    label: "Search Results",
-    route: "/search",
-    enabled: false,
-  },
-  {
-    value: "category",
-    label: "Category Page",
-    route: "/c/[slug]",
-    enabled: false,
-  },
-  { value: "checkout", label: "Checkout", route: "/checkout", enabled: false },
-] as const;
+type DataSource = "demo" | "yaml-file" | "yaml-url";
 
-export function DashboardClient({ initialTab }: { initialTab: TabKey }) {
+export function DashboardClient({
+  initialTab,
+  runUrl,
+}: {
+  initialTab: TabKey;
+  runUrl?: string;
+}) {
   const [metrics, setMetrics] = useState<ClientMetrics | null>(null);
   const [mockData, setMockData] = useState<MockDashboardData | null>(null);
   const [activeTab, setActiveTabState] = useState<TabKey>(initialTab);
   const [loading, setLoading] = useState(true);
   const [pctl, setPctl] = useState<number>(99);
-  const [pageType, setPageType] = useState("pdp");
+  const [dataSource, setDataSource] = useState<DataSource>("demo");
+  const [urlError, setUrlError] = useState<string | null>(null);
 
   const setActiveTab = useCallback((tab: TabKey) => {
     setActiveTabState(tab);
@@ -64,26 +57,56 @@ export function DashboardClient({ initialTab }: { initialTab: TabKey }) {
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
-  const currentPage =
-    PAGE_TYPES.find((p) => p.value === pageType) ?? PAGE_TYPES[0];
-
   const refreshMetrics = useCallback(() => {
     setLoading(true);
     setMockData(null);
+    setDataSource("demo");
     const data = clientMetricsStore.getMetrics();
     setMetrics(data);
     setLoading(false);
   }, []);
 
-  const loadMockData = useCallback((data: MockDashboardData) => {
-    setMockData(data);
-    setMetrics(null);
-    setLoading(false);
-  }, []);
+  const loadMockData = useCallback(
+    (data: MockDashboardData, source: DataSource = "yaml-file") => {
+      setMockData(data);
+      setMetrics(null);
+      setDataSource(source);
+      setLoading(false);
+    },
+    [],
+  );
+
+  // Load YAML from ?run=URL parameter
+  useEffect(() => {
+    if (!runUrl) return;
+    let cancelled = false;
+    setLoading(true);
+    setUrlError(null);
+    fetch(runUrl)
+      .then((res) => {
+        if (!res.ok)
+          throw new Error(`Failed to fetch YAML: ${res.status} ${res.statusText}`);
+        return res.text();
+      })
+      .then((text) => {
+        if (cancelled) return;
+        const data = parseYamlDashboard(text);
+        loadMockData(data, "yaml-url");
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setUrlError(err instanceof Error ? err.message : "Failed to load YAML from URL");
+        setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [runUrl, loadMockData]);
 
   useEffect(() => {
+    if (runUrl) return; // skip seed when loading from URL
     clientMetricsStore.seedIfFirstVisit().then(() => refreshMetrics());
-  }, [refreshMetrics]);
+  }, [refreshMetrics, runUrl]);
 
   function clearMetrics() {
     clientMetricsStore.clear();
@@ -106,40 +129,23 @@ export function DashboardClient({ initialTab }: { initialTab: TabKey }) {
       <div className="max-w-7xl mx-auto space-y-4 md:space-y-6">
         {/* Header */}
         <div className="flex items-start sm:items-center justify-between gap-3">
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-3">
               <h1 className="text-base md:text-xl font-bold text-white">
                 Suspense Dash
               </h1>
               {isMock && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-900/50 border border-blue-800 text-blue-300">
-                  YAML
+                  {dataSource === "yaml-url" ? "LINK" : "YAML"}
                 </span>
               )}
-              <a
-                href="/products/demo-sku"
-                className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
-              >
-                View Demo PDP
-              </a>
+              {!isMock && metrics && metrics.totalPageLoads > 0 && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-900/50 border border-emerald-800 text-emerald-300">
+                  DEMO
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-2 mt-3">
-              <select
-                value={pageType}
-                onChange={(e) => setPageType(e.target.value)}
-                className="bg-zinc-800 border border-zinc-700 rounded px-1.5 py-0.5 text-xs text-zinc-300 font-mono focus:outline-none focus:border-zinc-500 w-16"
-              >
-                {PAGE_TYPES.map((pt) => (
-                  <option
-                    key={pt.value}
-                    value={pt.value}
-                    disabled={!pt.enabled}
-                  >
-                    {pt.label}
-                    {!pt.enabled ? " (coming soon)" : ""}
-                  </option>
-                ))}
-              </select>
               <select
                 value={pctl}
                 onChange={(e) => setPctl(Number(e.target.value))}
@@ -153,17 +159,39 @@ export function DashboardClient({ initialTab }: { initialTab: TabKey }) {
               </select>
               <span className="text-xs text-zinc-500 truncate hidden sm:inline">
                 {isMock
-                  ? `${mockData.route} — YAML mock`
-                  : `${currentPage.route} — ${metrics ? `${metrics.totalPageLoads} loads` : "loading..."}`}
+                  ? `${mockData.route}${dataSource === "yaml-url" ? ` — ${runUrl}` : " — YAML import"}`
+                  : `/products/[sku] — ${metrics ? `${metrics.totalPageLoads} loads` : "loading..."}`}
               </span>
               <span className="text-xs text-zinc-500 truncate sm:hidden">
                 {isMock
-                  ? "YAML mock"
+                  ? mockData.route
                   : metrics ? `${metrics.totalPageLoads} loads` : "loading..."}
               </span>
             </div>
           </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {!isMock && hasData && (
+              <button
+                onClick={clearMetrics}
+                className="px-2.5 py-1 text-xs border border-zinc-700 rounded text-zinc-500 hover:text-red-300 hover:border-red-800 transition-colors"
+              >
+                Clear
+              </button>
+            )}
+            <a
+              href="/products/demo-sku"
+              className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+            >
+              Demo PDP
+            </a>
+          </div>
         </div>
+
+        {urlError && (
+          <div className="p-3 bg-red-950/50 border border-red-800 rounded text-sm text-red-300">
+            Failed to load YAML from URL: {urlError}
+          </div>
+        )}
 
         {/* Tab navigation — own row, horizontal only */}
         <div className="flex gap-1 overflow-x-auto overflow-y-hidden border-b border-zinc-800">
@@ -265,12 +293,6 @@ export function DashboardClient({ initialTab }: { initialTab: TabKey }) {
             className="px-3 py-1.5 text-sm border border-zinc-700 rounded text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 transition-colors"
           >
             Demo
-          </button>
-          <button
-            onClick={clearMetrics}
-            className="px-3 py-1.5 text-sm border border-zinc-700 rounded text-zinc-400 hover:text-red-300 hover:border-red-800 transition-colors"
-          >
-            Clear
           </button>
         </div>
       </div>
