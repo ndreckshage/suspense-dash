@@ -50,6 +50,7 @@ interface YamlQuery {
 interface YamlBoundary {
   render_cost?: PctlValue;
   lcp_critical?: boolean;
+  csr?: boolean;
   queries?: Record<string, YamlQuery>;
   [key: string]: unknown;
 }
@@ -87,6 +88,7 @@ interface YamlPage {
 const RESERVED_KEYS = new Set([
   "render_cost",
   "lcp_critical",
+  "csr",
   "queries",
 ]);
 
@@ -108,7 +110,10 @@ const BOUNDARY_SLOS: Record<string, number> = {
   "Layout.Content.Main.AddToCart": 25,
   "Layout.Content.Carousels": 500,
   "Layout.Content.Reviews": 690,
+  "Layout.Content.Reviews.ReviewsQA": 400,
   "Layout.Footer": 125,
+  "Layout.Nav.CartIndicator": 200,
+  "Layout.Content.Main.Hero.FavoriteButton": 150,
 };
 
 // ---- Helpers ----
@@ -208,6 +213,8 @@ function collectBoundaryTree(
   parentPath: string,
   phase: "ssr" | "csr",
 ): BoundaryInfo {
+  // Allow individual boundaries to override phase via `csr: true`
+  const effectivePhase = node.csr ? "csr" : phase;
   const path = parentPath ? `${parentPath}.${name}` : name;
 
   const queries: QueryInfo[] = [];
@@ -222,7 +229,7 @@ function collectBoundaryTree(
           value,
           boundaryPath: path,
           queryName,
-          phase,
+          phase: effectivePhase,
         });
       }
       queries.push({
@@ -230,7 +237,7 @@ function collectBoundaryTree(
         boundaryPath: path,
         duration: query.duration,
         ops,
-        phase,
+        phase: effectivePhase,
       });
     }
   }
@@ -238,7 +245,7 @@ function collectBoundaryTree(
   const childBoundaries = getChildBoundaries(node);
   const children: BoundaryInfo[] = [];
   for (const [childName, childNode] of Object.entries(childBoundaries)) {
-    children.push(collectBoundaryTree(childName, childNode, path, phase));
+    children.push(collectBoundaryTree(childName, childNode, path, effectivePhase));
   }
 
   return {
@@ -249,7 +256,7 @@ function collectBoundaryTree(
     renderCost: node.render_cost ?? 1,
     queries,
     children,
-    phase,
+    phase: effectivePhase,
   };
 }
 
@@ -475,9 +482,11 @@ function computeTree(
     }
   }
   scheduleBoundaries(ssrRoots, 0);
-  // CSR boundaries start after hydration — but we don't have hydrationMs here,
-  // so just use 0-based offsets (tree table shows relative times anyway)
-  scheduleBoundaries(csrRoots, 0);
+  // CSR boundaries (if passed separately) start after hydration — but we don't
+  // have hydrationMs here, so just use 0-based offsets
+  if (csrRoots.length > 0) {
+    scheduleBoundaries(csrRoots, 0);
+  }
 
   const nodes: MockTreeNode[] = [];
   let uncachedOps = 0;
@@ -518,6 +527,7 @@ function computeTree(
       lcpCritical: b.lcpCritical,
       cached: false,
       hasChildren,
+      phase: b.phase,
     });
 
     // Query nodes
@@ -548,6 +558,7 @@ function computeTree(
         lcpCritical: false,
         cached: isCached,
         hasChildren: false,
+        phase: b.phase,
       });
 
       // Op nodes
@@ -576,6 +587,7 @@ function computeTree(
           subgraphName: op.subgraphName,
           subgraphColor,
           hasChildren: false,
+          phase: b.phase,
         });
       }
     }
@@ -725,18 +737,48 @@ export function parseYamlDashboard(yamlString: string): MockDashboardData {
     throw new Error("YAML must have a 'boundaries' section");
   }
 
-  // Collect full tree structure
-  const ssrRoots: BoundaryInfo[] = [];
+  // Collect full tree structure (CSR boundaries are nested inline with csr: true)
+  const allRoots: BoundaryInfo[] = [];
   for (const [name, node] of Object.entries(doc.boundaries)) {
-    ssrRoots.push(collectBoundaryTree(name, node, "", "ssr"));
+    allRoots.push(collectBoundaryTree(name, node, "", "ssr"));
   }
 
-  const csrRoots: BoundaryInfo[] = [];
+  // Legacy support: standalone csr_boundaries section
   if (doc.csr_boundaries) {
     for (const [name, node] of Object.entries(doc.csr_boundaries)) {
-      csrRoots.push(collectBoundaryTree(name, node, "csr", "csr"));
+      allRoots.push(collectBoundaryTree(name, node, "csr", "csr"));
     }
   }
+
+  // Extract CSR boundaries from the tree for waterfall computation (which
+  // treats SSR and CSR separately), while keeping them nested for tree view.
+  function extractCsrBoundaries(roots: BoundaryInfo[]): { ssrRoots: BoundaryInfo[]; csrRoots: BoundaryInfo[] } {
+    const csrRoots: BoundaryInfo[] = [];
+
+    function processChildren(children: BoundaryInfo[]): BoundaryInfo[] {
+      const ssrChildren: BoundaryInfo[] = [];
+      for (const child of children) {
+        if (child.phase === "csr") {
+          csrRoots.push(child);
+        } else {
+          ssrChildren.push({ ...child, children: processChildren(child.children) });
+        }
+      }
+      return ssrChildren;
+    }
+
+    const ssrRoots: BoundaryInfo[] = [];
+    for (const root of roots) {
+      if (root.phase === "csr") {
+        csrRoots.push(root);
+      } else {
+        ssrRoots.push({ ...root, children: processChildren(root.children) });
+      }
+    }
+    return { ssrRoots, csrRoots };
+  }
+
+  const { ssrRoots, csrRoots } = extractCsrBoundaries(allRoots);
 
   // Compute pre-computed data for each percentile
   const waterfall: Record<number, MockWaterfallData> = {};
@@ -774,7 +816,8 @@ export function parseYamlDashboard(yamlString: string): MockDashboardData {
     if (navTiming) navTiming.loafCount = loafEntries.length;
 
     waterfall[pctl] = computeWaterfall(ssrRoots, csrRoots, pctl, hydrationMs, navTiming, loafEntries);
-    tree[pctl] = computeTree(ssrRoots, csrRoots, pctl);
+    // Tree uses the full (un-split) roots so CSR boundaries stay nested under parents
+    tree[pctl] = computeTree(allRoots, [], pctl);
     subgraphs[pctl] = computeSubgraphs(ssrRoots, csrRoots, pctl);
   }
 
