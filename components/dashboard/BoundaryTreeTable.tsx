@@ -34,6 +34,7 @@ interface TreeItem {
   opName?: string;
   subgraphName?: string;
   lcpCritical?: boolean;
+  phase?: "ssr" | "csr";
 }
 
 /**
@@ -61,11 +62,13 @@ function buildTreeFromMetrics(
   // 1. Collect unique boundary paths with median wall_start_ms
   const wallStartsByPath = new Map<string, number[]>();
   const lcpByPath = new Map<string, boolean>();
+  const phaseByPath = new Map<string, "ssr" | "csr">();
   for (const b of boundaries) {
     const list = wallStartsByPath.get(b.boundary_path) ?? [];
     list.push(b.wall_start_ms);
     wallStartsByPath.set(b.boundary_path, list);
     if (b.is_lcp_critical) lcpByPath.set(b.boundary_path, true);
+    if (b.phase) phaseByPath.set(b.boundary_path, b.phase);
   }
 
   const allPaths = [...wallStartsByPath.keys()];
@@ -136,6 +139,7 @@ function buildTreeFromMetrics(
         type: "boundary",
         boundaryPath,
         lcpCritical: lcpByPath.get(boundaryPath) ?? false,
+        phase: phaseByPath.get(boundaryPath),
       });
 
       // Add queries and subgraph ops under this boundary
@@ -150,6 +154,7 @@ function buildTreeFromMetrics(
             type: "query",
             boundaryPath,
             queryName,
+            phase: phaseByPath.get(boundaryPath),
           });
 
           const opsKey = `${boundaryPath}:${queryName}`;
@@ -165,6 +170,7 @@ function buildTreeFromMetrics(
                 queryName,
                 opName,
                 subgraphName,
+                phase: phaseByPath.get(boundaryPath),
               });
               opIdx++;
             }
@@ -346,6 +352,7 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
           lcpCritical: item.lcpCritical ?? false,
           cached: false,
           hasChildren: boundaryHasChildren.has(item.boundaryPath),
+          phase: item.phase,
         });
       } else if (item.type === "query") {
         const key = `${item.boundaryPath}:${item.queryName}`;
@@ -369,6 +376,7 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
           lcpCritical: false,
           cached: isCached,
           hasChildren: false,
+          phase: item.phase,
         });
       } else {
         const key = `${item.boundaryPath}:${item.queryName}:${item.opName}`;
@@ -397,6 +405,7 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
           subgraphName: item.subgraphName,
           subgraphColor,
           hasChildren: false,
+          phase: item.phase,
         });
       }
     }
