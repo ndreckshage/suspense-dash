@@ -33,6 +33,10 @@ subgraphs:
   user-subgraph:
     slo: 150
 
+# Network/LCP overhead — these have reasonable defaults (20ms / 80ms) if omitted
+network_offset_ms: { p50: 15, p75: 20, p90: 25, p99: 40 }
+lcp_image_latency_ms: { p50: 60, p75: 80, p90: 100, p99: 150 }
+
 hydration_ms: { p50: 120, p75: 145, p90: 170, p99: 210 }
 initialization_ms: { p50: 320, p75: 380, p90: 450, p99: 580 }
 navigation_timing:

@@ -177,6 +177,18 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
     return 0;
   }, [pctl, mock]);
 
+  // Network offset — edge/network overhead before server processing
+  const networkOffsetMs = useMemo(() => {
+    if (mock?.[pctl]) return mock[pctl].networkOffsetMs ?? 0;
+    return 0;
+  }, [pctl, mock]);
+
+  // LCP image latency — browser download + decode + paint after HTML streams
+  const lcpImageLatencyMs = useMemo(() => {
+    if (mock?.[pctl]) return mock[pctl].lcpImageLatencyMs ?? 0;
+    return 0;
+  }, [pctl, mock]);
+
   // LoAF entries — from mock or representative load
   const aggregatedLoaf = useMemo(() => {
     if (mock?.[pctl]) return mock[pctl].loafEntries ?? [];
@@ -191,13 +203,14 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
     return navigationTimings[representativeRequestId] ?? null;
   }, [navigationTimings, representativeRequestId, pctl, mock]);
 
-  const { timings, lcpDataReady, lcpRendered, lcpBlocked, shellEnd } =
+  const { timings, lcpDataReady, lcpRendered, lcpBlocked, lcpDisplayed, shellEnd } =
     useMemo(() => {
       const emptyResult = {
         timings: [] as BoundaryTiming[],
         lcpDataReady: 0,
         lcpRendered: 0,
         lcpBlocked: 0,
+        lcpDisplayed: 0,
         shellEnd: 0,
       };
 
@@ -297,15 +310,17 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
           lcpBoundary.renderCost
         : 0;
       const lcpBlocked = lcpBoundary?.blocked ?? 0;
+      const lcpDisplayed = lcpRendered > 0 ? lcpRendered + lcpImageLatencyMs : 0;
 
       return {
         timings,
         lcpDataReady,
         lcpRendered,
         lcpBlocked,
+        lcpDisplayed,
         shellEnd,
       };
-    }, [ssrBoundaries, ssrQueries, representativeRequestId, pctl, mock]);
+    }, [ssrBoundaries, ssrQueries, representativeRequestId, pctl, mock, lcpImageLatencyMs]);
 
   // Compute CSR query timings for visualization
   const csrTimings = useMemo(() => {
@@ -354,8 +369,8 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
     const ssrEnds = timings.map((t) => t.wallStart + t.total);
 
     if (timelineScope === "lcp") {
-      // LCP-only: cap timeline right after LCP render + 10% padding
-      const totalMs = Math.max(lcpRendered, 1);
+      // LCP-only: cap timeline right after LCP displayed + 10% padding
+      const totalMs = Math.max(lcpDisplayed, lcpRendered, 1);
       return Math.ceil(totalMs * 1.10);
     }
 
@@ -369,7 +384,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
     const initEnd = Math.max(csrInitComplete, initializationMs);
     const totalMs = Math.max(...ssrEnds, lcpRendered, initEnd, 1);
     return Math.ceil(totalMs * 1.10);
-  }, [timings, lcpRendered, csrInitComplete, initializationMs, timelineScope]);
+  }, [timings, lcpRendered, lcpDisplayed, csrInitComplete, initializationMs, timelineScope]);
 
   if (timings.length === 0) {
     return (
@@ -493,7 +508,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
             </Tooltip>
           )}
           {lcpRendered > 0 && (
-            <Tooltip content={`LCP rendered at ${lcpRendered}ms — LCP boundary HTML serialized and flushed${lcpBlocked > 0 ? ` (blocked ${lcpBlocked}ms waiting for thread)` : ""}`}>
+            <Tooltip content={`LCP streamed at ${lcpRendered}ms — LCP boundary HTML serialized and flushed to the browser${lcpBlocked > 0 ? ` (blocked ${lcpBlocked}ms waiting for thread)` : ""}`}>
               <div className="relative h-4">
                 <div
                   className="absolute top-0 flex items-center"
@@ -501,10 +516,26 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
                 >
                   <div className="w-px h-3 bg-green-400" />
                   <span className="text-[10px] text-green-400 ml-1 font-mono whitespace-nowrap truncate max-w-[140px] md:max-w-[200px]">
-                    LCP render @ {lcpRendered}ms
+                    LCP streamed @ {lcpRendered}ms
                     {lcpBlocked > 0 && (
                       <span className="text-amber-400"> (+{lcpBlocked}ms)</span>
                     )}
+                  </span>
+                </div>
+              </div>
+            </Tooltip>
+          )}
+          {lcpDisplayed > 0 && (
+            <Tooltip content={`LCP displayed at ${lcpDisplayed}ms — image downloaded, decoded and painted by the browser (+${lcpImageLatencyMs}ms network/render overhead after stream)`}>
+              <div className="relative h-4">
+                <div
+                  className="absolute top-0 flex items-center"
+                  style={{ left: `calc(${(lcpDisplayed / maxMs) * 100}% + 13px)` }}
+                >
+                  <div className="w-px h-3 bg-emerald-300" />
+                  <span className="text-[10px] text-emerald-300 ml-1 font-mono whitespace-nowrap truncate max-w-[140px] md:max-w-[200px]">
+                    LCP displayed @ {lcpDisplayed}ms
+                    <span className="text-zinc-500"> (+{lcpImageLatencyMs}ms)</span>
                   </span>
                 </div>
               </div>
@@ -563,6 +594,24 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
           {/* Waterfall marker: shell end */}
 
           <div className="space-y-1.5 relative z-10">
+            {networkOffsetMs > 0 && (
+              <Tooltip content={`Network offset: ${networkOffsetMs}ms — edge routing, DNS, TCP/TLS, and request overhead before server processing begins`}>
+                <div className="relative h-9 md:h-7">
+                  <div
+                    className="absolute top-0 h-full rounded flex items-center overflow-hidden cursor-default border border-dashed border-zinc-600"
+                    style={{
+                      left: "0%",
+                      width: `${Math.max((networkOffsetMs / maxMs) * 100, 1.5)}%`,
+                      backgroundColor: "rgba(113, 113, 122, 0.3)",
+                    }}
+                  >
+                    <span className="text-xs text-zinc-400 px-1.5 truncate font-mono">
+                      Network ({networkOffsetMs}ms)
+                    </span>
+                  </div>
+                </div>
+              </Tooltip>
+            )}
             {timings
               .filter((t) => t.name !== "Layout")
               .map((t) => {
@@ -615,6 +664,18 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
               })}
           </div>
 
+          {/* Network offset bar */}
+          {networkOffsetMs > 0 && (
+            <div
+              className="absolute top-0 bottom-0 z-0"
+              style={{
+                left: "12px",
+                width: `${(networkOffsetMs / maxMs) * 100}%`,
+                backgroundColor: "rgba(113, 113, 122, 0.15)",
+              }}
+            />
+          )}
+
           {/* Vertical marker lines */}
           {lcpDataReady > 0 && (
             <div
@@ -626,6 +687,12 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
             <div
               className="absolute top-0 bottom-0 w-px bg-green-400/40 z-0"
               style={{ left: `calc(${(lcpRendered / maxMs) * 100}% + 12px)` }}
+            />
+          )}
+          {lcpDisplayed > 0 && (
+            <div
+              className="absolute top-0 bottom-0 w-px bg-emerald-300/40 z-0"
+              style={{ left: `calc(${(lcpDisplayed / maxMs) * 100}% + 12px)` }}
             />
           )}
           {timelineScope === "full" && hydrationMs > 0 && (
@@ -713,6 +780,12 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
             <div
               className="absolute top-3 bottom-3 w-px bg-green-400/40 z-0"
               style={{ left: `calc(${(lcpRendered / maxMs) * 100}% + 12px)` }}
+            />
+          )}
+          {lcpDisplayed > 0 && (
+            <div
+              className="absolute top-3 bottom-3 w-px bg-emerald-300/40 z-0"
+              style={{ left: `calc(${(lcpDisplayed / maxMs) * 100}% + 12px)` }}
             />
           )}
           {timelineScope === "full" && hydrationMs > 0 && (
@@ -812,6 +885,12 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
               <div
                 className="absolute top-3 bottom-3 w-px bg-green-400/40 z-0"
                 style={{ left: `calc(${(lcpRendered / maxMs) * 100}% + 12px)` }}
+              />
+            )}
+            {lcpDisplayed > 0 && (
+              <div
+                className="absolute top-3 bottom-3 w-px bg-emerald-300/40 z-0"
+                style={{ left: `calc(${(lcpDisplayed / maxMs) * 100}% + 12px)` }}
               />
             )}
             {hydrationMs > 0 && (
@@ -997,6 +1076,12 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
                   style={{ left: `calc(${(lcpRendered / maxMs) * 100}% + 12px)` }}
                 />
               )}
+              {lcpDisplayed > 0 && (
+                <div
+                  className="absolute top-3 bottom-3 w-px bg-emerald-300/40 z-0"
+                  style={{ left: `calc(${(lcpDisplayed / maxMs) * 100}% + 12px)` }}
+                />
+              )}
               {hydrationMs > 0 && (
                 <div
                   className="absolute top-3 bottom-3 w-px border-l border-dashed border-amber-400/60 z-0"
@@ -1043,9 +1128,21 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
           </div>
         )}
         <div>
-          <span className="text-zinc-500">Total to LCP render: </span>
-          <span className="text-blue-400 font-medium">{lcpRendered}ms</span>
+          <span className="text-zinc-500">LCP streamed: </span>
+          <span className="text-green-400 font-medium">{lcpRendered}ms</span>
         </div>
+        {lcpDisplayed > 0 && (
+          <div>
+            <span className="text-zinc-500">LCP displayed: </span>
+            <span className="text-emerald-300 font-medium">{lcpDisplayed}ms</span>
+          </div>
+        )}
+        {networkOffsetMs > 0 && (
+          <div>
+            <span className="text-zinc-500">Network offset: </span>
+            <span className="text-zinc-400">{networkOffsetMs}ms</span>
+          </div>
+        )}
         {hydrationMs > 0 && (
           <div>
             <span className="text-zinc-500">Hydration: </span>

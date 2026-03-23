@@ -46,6 +46,10 @@ export interface MockWaterfallData {
   initializationMs: number;
   navigationTiming: NavigationTiming | null;
   loafEntries: MockLoAFEntry[];
+  /** Edge/network overhead before the server starts processing (ms) */
+  networkOffsetMs: number;
+  /** Browser image download + decode + paint latency after LCP HTML streams (ms) */
+  lcpImageLatencyMs: number;
 }
 
 // ---- Tree (BoundaryTreeTable) ----

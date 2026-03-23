@@ -81,6 +81,10 @@ interface YamlPage {
   initialization_ms?: PctlValue;
   navigation_timing?: YamlNavTiming;
   loaf_entries?: YamlLoAFEntry[];
+  /** Edge/network overhead before the server starts processing (ms). Default: 20 */
+  network_offset_ms?: PctlValue;
+  /** Browser image download + decode + paint latency after LCP HTML streams (ms). Default: 80 */
+  lcp_image_latency_ms?: PctlValue;
   boundaries: Record<string, YamlBoundary>;
   csr_boundaries?: Record<string, YamlBoundary>;
 }
@@ -265,6 +269,8 @@ function computeWaterfall(
   navTiming: NavigationTiming | null,
   loafEntries: MockLoAFEntry[],
   colorMap: Map<string, string>,
+  networkOffsetMs: number,
+  lcpImageLatencyMs: number,
 ): MockWaterfallData {
   const flat = flattenTree(ssrBoundaries);
 
@@ -360,7 +366,7 @@ function computeWaterfall(
     return thread;
   }
 
-  schedule(ssrBoundaries, 0, 0);
+  schedule(ssrBoundaries, networkOffsetMs, 0);
 
   // Build BoundaryTiming[] with thread simulation
   const ssrTimings: WaterfallTiming[] = scheduled.map((s) => {
@@ -426,7 +432,7 @@ function computeWaterfall(
     }
   }
 
-  return { ssrTimings, csrTimings, hydrationMs, initializationMs, navigationTiming: navTiming, loafEntries };
+  return { ssrTimings, csrTimings, hydrationMs, initializationMs, navigationTiming: navTiming, loafEntries, networkOffsetMs, lcpImageLatencyMs };
 }
 
 // ---- Tree computation ----
@@ -820,11 +826,22 @@ export function parseYamlDashboard(yamlString: string): MockDashboardData {
   const tree: Record<number, MockTreeData> = {};
   const subgraphs: Record<number, MockSubgraphData> = {};
 
+  // Default offsets: 20ms edge/network overhead, 80ms browser image latency
+  const DEFAULT_NETWORK_OFFSET = 20;
+  const DEFAULT_LCP_IMAGE_LATENCY = 80;
+
   for (const pctl of PCTLS) {
     const hydrationMs = Math.round(atPctl(doc.hydration_ms, pctl));
     const initializationMs = doc.initialization_ms
       ? Math.round(atPctl(doc.initialization_ms, pctl))
       : 0;
+    const networkOffsetMs = Math.round(
+      atPctl(doc.network_offset_ms, pctl, DEFAULT_NETWORK_OFFSET),
+    );
+    const lcpImageLatencyMs = Math.round(
+      atPctl(doc.lcp_image_latency_ms, pctl, DEFAULT_LCP_IMAGE_LATENCY),
+    );
+
 
     let navTiming: NavigationTiming | null = null;
     if (doc.navigation_timing) {
@@ -853,7 +870,7 @@ export function parseYamlDashboard(yamlString: string): MockDashboardData {
     // Derive loafCount from entries
     if (navTiming) navTiming.loafCount = loafEntries.length;
 
-    waterfall[pctl] = computeWaterfall(ssrRoots, csrRoots, pctl, hydrationMs, initializationMs, navTiming, loafEntries, subgraphColorMap);
+    waterfall[pctl] = computeWaterfall(ssrRoots, csrRoots, pctl, hydrationMs, initializationMs, navTiming, loafEntries, subgraphColorMap, networkOffsetMs, lcpImageLatencyMs);
     // Tree uses the full (un-split) roots so CSR boundaries stay nested under parents
     tree[pctl] = computeTree(allRoots, [], pctl, subgraphColorMap, subgraphSloMap);
     subgraphs[pctl] = computeSubgraphs(ssrRoots, csrRoots, pctl, subgraphColorMap, subgraphSloMap);
