@@ -367,9 +367,12 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
 
     // Full scope: cap at ~10% after the latest init milestone
     const initEnd = Math.max(csrInitComplete, initializationMs);
-    const totalMs = Math.max(...ssrEnds, lcpRendered, initEnd, 1);
+    const loafEnd = aggregatedLoaf.length > 0
+      ? Math.max(...aggregatedLoaf.map((e) => e.startTime + e.duration))
+      : 0;
+    const totalMs = Math.max(...ssrEnds, lcpRendered, initEnd, loafEnd, 1);
     return Math.ceil(totalMs * 1.10);
-  }, [timings, lcpRendered, csrInitComplete, initializationMs, timelineScope]);
+  }, [timings, lcpRendered, csrInitComplete, initializationMs, timelineScope, aggregatedLoaf]);
 
   if (timings.length === 0) {
     return (
