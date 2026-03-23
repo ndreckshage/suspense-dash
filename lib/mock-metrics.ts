@@ -19,6 +19,7 @@ export interface WaterfallTiming {
   total: number;
   lcpCritical: boolean;
   queryName: string;
+  queryNames: string[];
   cached: boolean;
   /** Color of the heaviest subgraph in this boundary's queries */
   subgraphColor?: string;
@@ -30,6 +31,7 @@ export interface WaterfallCsrTiming {
   wallStart: number;
   fetchDuration: number;
   queryName: string;
+  queryNames: string[];
 }
 
 export interface MockLoAFEntry {
