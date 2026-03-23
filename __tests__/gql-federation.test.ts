@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import { SUBGRAPHS, SUBGRAPH_OPERATIONS, GQL_QUERIES } from "@/lib/gql-federation";
-import type { SubgraphName } from "@/lib/gql-federation";
 
 describe("SUBGRAPHS", () => {
   it("defines 9 subgraph services", () => {
@@ -8,7 +7,7 @@ describe("SUBGRAPHS", () => {
   });
 
   it("each subgraph has a color and sloMs", () => {
-    for (const [name, def] of Object.entries(SUBGRAPHS)) {
+    for (const [, def] of Object.entries(SUBGRAPHS)) {
       expect(def.color).toMatch(/^rgb\(/);
       expect(typeof def.sloMs).toBe("number");
       expect(def.sloMs).toBeGreaterThanOrEqual(0);
@@ -27,7 +26,7 @@ describe("SUBGRAPHS", () => {
 describe("SUBGRAPH_OPERATIONS", () => {
   it("defines operations with valid subgraph references", () => {
     const subgraphNames = Object.keys(SUBGRAPHS);
-    for (const [opName, def] of Object.entries(SUBGRAPH_OPERATIONS)) {
+    for (const [, def] of Object.entries(SUBGRAPH_OPERATIONS)) {
       expect(subgraphNames).toContain(def.subgraph);
       expect(def.baseMs).toBeGreaterThan(0);
       expect(def.sloMs).toBeGreaterThan(0);
@@ -45,7 +44,7 @@ describe("SUBGRAPH_OPERATIONS", () => {
 describe("GQL_QUERIES", () => {
   it("defines queries with valid operation references", () => {
     const opNames = Object.keys(SUBGRAPH_OPERATIONS);
-    for (const [queryName, def] of Object.entries(GQL_QUERIES)) {
+    for (const [, def] of Object.entries(GQL_QUERIES)) {
       expect(def.operations.length).toBeGreaterThan(0);
       for (const op of def.operations) {
         expect(opNames).toContain(op);
