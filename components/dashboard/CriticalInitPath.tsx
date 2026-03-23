@@ -4,6 +4,7 @@ import { useMemo, useState, useCallback } from "react";
 import type { BoundaryMetric, QueryMetric } from "@/lib/metrics-store";
 import type { LoAFEntry, NavigationTiming } from "@/lib/client-metrics-store";
 import type { MockWaterfallData } from "@/lib/mock-metrics";
+import { filterLoafsByCsrCutoff, mergeLoafEntries, getLastCsrQueryStart } from "@/lib/loaf-utils";
 import { TabDescription } from "./TabDescription";
 import { Tooltip, TooltipContent } from "./Tooltip";
 import type { TooltipLine } from "./Tooltip";
@@ -313,10 +314,10 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
   }, [csrTimings]);
 
   // Last CSR query start time — LoAFs starting after this are excluded
-  const lastCsrQueryStart = useMemo(() => {
-    if (csrTimings.length === 0) return Infinity;
-    return Math.max(...csrTimings.map((t) => t.wallStart));
-  }, [csrTimings]);
+  const lastCsrQueryStart = useMemo(
+    () => getLastCsrQueryStart(csrTimings),
+    [csrTimings],
+  );
 
   // Compute x-axis scale from all percentile-based values
   const maxMs = useMemo(() => {
@@ -916,37 +917,9 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
 
       {/* Long Animation Frames */}
       {timelineScope === "full" && (() => {
-        // Merge LoAF entries that are within 20ms of each other into groups
-        const mergedLoaf: {
-          startTime: number;
-          endTime: number;
-          totalDuration: number;
-          totalBlocking: number;
-          entries: typeof aggregatedLoaf;
-        }[] = [];
-
-        // Only include LoAFs that started before the last CSR query begins
-        const eligible = aggregatedLoaf.filter((e) => e.startTime < lastCsrQueryStart);
-        const sorted = [...eligible].sort((a, b) => a.startTime - b.startTime);
-        for (const entry of sorted) {
-          const entryEnd = entry.startTime + entry.duration;
-          const last = mergedLoaf[mergedLoaf.length - 1];
-          if (last && entry.startTime - last.endTime <= 20) {
-            // Merge into previous group
-            last.endTime = Math.max(last.endTime, entryEnd);
-            last.totalDuration += entry.duration;
-            last.totalBlocking += entry.blockingDuration;
-            last.entries.push(entry);
-          } else {
-            mergedLoaf.push({
-              startTime: entry.startTime,
-              endTime: entryEnd,
-              totalDuration: entry.duration,
-              totalBlocking: entry.blockingDuration,
-              entries: [entry],
-            });
-          }
-        }
+        // Only include LoAFs that started before the last CSR query begins, then merge adjacent ones
+        const eligible = filterLoafsByCsrCutoff(aggregatedLoaf, lastCsrQueryStart);
+        const mergedLoaf = mergeLoafEntries(eligible);
 
         const totalBlockingTime = eligible.reduce((sum, e) => sum + e.blockingDuration, 0);
 
