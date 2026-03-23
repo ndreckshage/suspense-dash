@@ -319,13 +319,6 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
     [csrTimings],
   );
 
-  // Max end time of visible (eligible) LoAFs
-  const visibleLoafEnd = useMemo(() => {
-    const eligible = filterLoafsByCsrCutoff(aggregatedLoaf, lastCsrQueryStart);
-    if (eligible.length === 0) return 0;
-    return Math.max(...eligible.map((e) => e.startTime + e.duration));
-  }, [aggregatedLoaf, lastCsrQueryStart]);
-
   // Compute x-axis scale from all percentile-based values
   const maxMs = useMemo(() => {
     if (timings.length === 0) return 1;
@@ -343,12 +336,12 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
       return Math.ceil(totalMs * 1.10);
     }
 
-    // Full scope: cap at ~10% after the latest visible milestone
-    // Use visible LoAF end times (not initializationMs which may include filtered-out LoAFs)
-    const initEnd = Math.max(csrInitComplete, visibleLoafEnd);
-    const totalMs = Math.max(...ssrEnds, lcpRendered, initEnd, 1);
+    // Full scope: cap at ~10% after the latest milestone
+    // Use csrInitComplete (computed end of CSR queries) — not initializationMs
+    // which is a static YAML value that can extend the scale past visible content
+    const totalMs = Math.max(...ssrEnds, lcpRendered, csrInitComplete, 1);
     return Math.ceil(totalMs * 1.10);
-  }, [timings, lcpRendered, lcpDisplayed, csrInitComplete, visibleLoafEnd, timelineScope]);
+  }, [timings, lcpRendered, lcpDisplayed, csrInitComplete, timelineScope]);
 
   if (timings.length === 0) {
     return (
@@ -515,6 +508,21 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
                   <div className="w-px h-3 bg-amber-400" />
                   <span className="text-[10px] text-amber-400 ml-1 font-mono whitespace-nowrap truncate max-w-[140px] md:max-w-[200px]">
                     Hydration @ {Math.round(hydrationMs)}ms
+                  </span>
+                </div>
+              </div>
+            </Tooltip>
+          )}
+          {timelineScope === "full" && csrInitComplete > 0 && (
+            <Tooltip content={`Init complete at ${Math.round(csrInitComplete)}ms — all client-side queries resolved, page fully interactive`}>
+              <div className="relative h-4">
+                <div
+                  className="absolute top-0 flex items-center"
+                  style={{ left: `calc(${(csrInitComplete / maxMs) * 100}% + 13px)` }}
+                >
+                  <div className="w-px h-3 bg-purple-400" />
+                  <span className="text-[10px] text-purple-400 ml-1 font-mono whitespace-nowrap truncate max-w-[140px] md:max-w-[200px]">
+                    Init complete @ {Math.round(csrInitComplete)}ms
                   </span>
                 </div>
               </div>
@@ -1069,25 +1077,6 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
           </div>
         );
       })()}
-
-      {/* Init complete marker — after LoAFs */}
-      {timelineScope === "full" && csrInitComplete > 0 && (
-        <div>
-          <Tooltip content={`Init complete at ${Math.round(csrInitComplete)}ms — all client-side queries resolved, page fully interactive`}>
-            <div className="relative h-4">
-              <div
-                className="absolute top-0 flex items-center"
-                style={{ left: `calc(${(csrInitComplete / maxMs) * 100}% + 13px)` }}
-              >
-                <div className="w-px h-3 bg-purple-400" />
-                <span className="text-[10px] text-purple-400 ml-1 font-mono whitespace-nowrap truncate max-w-[140px] md:max-w-[200px]">
-                  Init complete @ {Math.round(csrInitComplete)}ms
-                </span>
-              </div>
-            </div>
-          </Tooltip>
-        </div>
-      )}
 
       {/* Summary */}
       <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs font-mono">
