@@ -304,6 +304,12 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
     );
   }, [csrTimings]);
 
+  // Last CSR query start time — LoAFs starting after this are excluded
+  const lastCsrQueryStart = useMemo(() => {
+    if (csrTimings.length === 0) return Infinity;
+    return Math.max(...csrTimings.map((t) => t.wallStart));
+  }, [csrTimings]);
+
   // Compute x-axis scale from all percentile-based values
   const maxMs = useMemo(() => {
     if (timings.length === 0) return 1;
@@ -322,13 +328,11 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
     }
 
     // Full scope: cap at ~10% after the latest init milestone
+    // LoAFs no longer extend the timeline — they are clipped to the CSR query window
     const initEnd = Math.max(csrInitComplete, initializationMs);
-    const loafEnd = aggregatedLoaf.length > 0
-      ? Math.max(...aggregatedLoaf.map((e) => e.startTime + e.duration))
-      : 0;
-    const totalMs = Math.max(...ssrEnds, lcpRendered, initEnd, loafEnd, 1);
+    const totalMs = Math.max(...ssrEnds, lcpRendered, initEnd, 1);
     return Math.ceil(totalMs * 1.10);
-  }, [timings, lcpRendered, lcpDisplayed, csrInitComplete, initializationMs, timelineScope, aggregatedLoaf]);
+  }, [timings, lcpRendered, lcpDisplayed, csrInitComplete, initializationMs, timelineScope]);
 
   if (timings.length === 0) {
     return (
@@ -894,7 +898,9 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
           entries: typeof aggregatedLoaf;
         }[] = [];
 
-        const sorted = [...aggregatedLoaf].sort((a, b) => a.startTime - b.startTime);
+        // Only include LoAFs that started before the last CSR query begins
+        const eligible = aggregatedLoaf.filter((e) => e.startTime < lastCsrQueryStart);
+        const sorted = [...eligible].sort((a, b) => a.startTime - b.startTime);
         for (const entry of sorted) {
           const entryEnd = entry.startTime + entry.duration;
           const last = mergedLoaf[mergedLoaf.length - 1];
@@ -915,7 +921,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
           }
         }
 
-        const totalBlockingTime = aggregatedLoaf.reduce((sum, e) => sum + e.blockingDuration, 0);
+        const totalBlockingTime = eligible.reduce((sum, e) => sum + e.blockingDuration, 0);
 
         return (
           <div>
