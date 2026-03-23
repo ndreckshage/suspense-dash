@@ -29,6 +29,7 @@ interface BoundaryTiming {
   total: number;
   lcpCritical: boolean;
   queryName: string;
+  queryNames: string[];
   cached: boolean;
   subgraphColor?: string;
 }
@@ -173,12 +174,12 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
         );
         if (repBoundaries.length === 0) return emptyResult;
 
-        const queryNameByPath = new Map<string, string>();
+        const queryNamesByPath = new Map<string, string[]>();
         const queryByKey = new Map<string, QueryMetric[]>();
         for (const q of repQueries) {
-          if (!queryNameByPath.has(q.boundary_path)) {
-            queryNameByPath.set(q.boundary_path, q.queryName);
-          }
+          const names = queryNamesByPath.get(q.boundary_path) ?? [];
+          if (!names.includes(q.queryName)) names.push(q.queryName);
+          queryNamesByPath.set(q.boundary_path, names);
           const key = `${q.boundary_path}:${q.queryName}`;
           const list = queryByKey.get(key) ?? [];
           list.push(q);
@@ -189,11 +190,13 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
           .sort((a, b) => a.wall_start_ms - b.wall_start_ms)
           .map((m) => {
             const name = m.boundary_path.split(".").pop()!;
-            const queryName = queryNameByPath.get(m.boundary_path) ?? "";
-            const qKey = `${m.boundary_path}:${queryName}`;
-            const qMetrics = queryByKey.get(qKey) ?? [];
+            const queryNames = queryNamesByPath.get(m.boundary_path) ?? [];
+            const queryName = queryNames[0] ?? "";
+
+            // Check if ALL queries for this boundary are fully cached
+            const allQMetrics = queryNames.flatMap((qn) => queryByKey.get(`${m.boundary_path}:${qn}`) ?? []);
             const isCached =
-              qMetrics.length > 0 && qMetrics.every((q) => q.fullyCached);
+              allQMetrics.length > 0 && allQMetrics.every((q) => q.fullyCached);
 
             return {
               name,
@@ -207,6 +210,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
               total: m.render_duration_ms,
               lcpCritical: m.is_lcp_critical,
               queryName,
+              queryNames,
               cached: isCached,
             };
           });
@@ -278,22 +282,26 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
       (q) => q.requestId === representativeRequestId,
     );
 
-    const queryNameByPath = new Map<string, string>();
+    const csrQueryNamesByPath = new Map<string, string[]>();
     for (const q of repCsrQueries) {
-      if (!queryNameByPath.has(q.boundary_path)) {
-        queryNameByPath.set(q.boundary_path, q.queryName);
-      }
+      const names = csrQueryNamesByPath.get(q.boundary_path) ?? [];
+      if (!names.includes(q.queryName)) names.push(q.queryName);
+      csrQueryNamesByPath.set(q.boundary_path, names);
     }
 
     return repCsr
       .sort((a, b) => a.wall_start_ms - b.wall_start_ms)
-      .map((m) => ({
-        name: m.boundary_path.split(".").pop()!,
-        boundaryPath: m.boundary_path,
-        wallStart: m.wall_start_ms,
-        fetchDuration: m.fetch_duration_ms ?? m.render_duration_ms,
-        queryName: queryNameByPath.get(m.boundary_path) ?? "",
-      }));
+      .map((m) => {
+        const queryNames = csrQueryNamesByPath.get(m.boundary_path) ?? [];
+        return {
+          name: m.boundary_path.split(".").pop()!,
+          boundaryPath: m.boundary_path,
+          wallStart: m.wall_start_ms,
+          fetchDuration: m.fetch_duration_ms ?? m.render_duration_ms,
+          queryName: queryNames[0] ?? "",
+          queryNames,
+        };
+      });
   }, [csrBoundaries, csrQueries, representativeRequestId, pctl, mock]);
 
   // CSR init complete time (latest CSR query end)
@@ -570,10 +578,21 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
                 );
                 const color = t.subgraphColor ?? BOUNDARY_COLORS[t.name] ?? "rgb(100, 116, 139)";
 
+                const queryLabel = t.queryNames.length > 1
+                  ? `${t.queryNames.length} queries`
+                  : t.queryName;
+                const queryListLines: TooltipLine[] = t.queryNames.length > 1
+                  ? t.queryNames.map((qn, i) => ({ label: `  ${i + 1}.`, value: qn }))
+                  : [];
                 const tooltipLines: TooltipLine[] = t.cached
-                  ? [{ label: "Query", value: t.queryName }, { label: "Status", value: "Cached (React cache() dedup)", color: "text-cyan-400" }]
+                  ? [
+                      { label: t.queryNames.length > 1 ? "Queries" : "Query", value: queryLabel },
+                      ...queryListLines,
+                      { label: "Status", value: "Cached (React cache() dedup)", color: "text-cyan-400" },
+                    ]
                   : [
-                      { label: "Query", value: t.queryName },
+                      { label: t.queryNames.length > 1 ? "Queries" : "Query", value: queryLabel },
+                      ...queryListLines,
                       { label: "Wall start", value: `${t.wallStart}ms` },
                       { label: "Fetch", value: `${t.fetchDuration}ms`, color: "text-zinc-100" },
                       { label: "Render cost", value: `${t.renderCost}ms` },
@@ -603,7 +622,11 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
                       >
                         <span className="text-xs text-white px-1.5 truncate font-mono">
                           {t.name}{" "}
-                          {t.cached ? "(cached)" : `(${t.fetchDuration}ms)`}
+                          {t.cached
+                            ? "(cached)"
+                            : t.queryNames.length > 1
+                              ? `(${t.queryNames.length} queries, ${t.fetchDuration}ms)`
+                              : `(${t.fetchDuration}ms)`}
                         </span>
                       </div>
                     </div>
@@ -814,9 +837,10 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
                       <TooltipContent
                         title={t.name}
                         lines={[
-                          { label: "Query", value: t.queryName },
+                          { label: t.queryNames.length > 1 ? "Queries" : "Query", value: t.queryNames.length > 1 ? `${t.queryNames.length} queries` : t.queryName },
+                          ...(t.queryNames.length > 1 ? t.queryNames.map((qn, i) => ({ label: `  ${i + 1}.`, value: qn })) : []),
                           { label: "Starts at", value: `${Math.round(t.wallStart)}ms` },
-                          { label: "Fetch", value: `${t.fetchDuration}ms`, color: "text-zinc-100" },
+                          { label: "Fetch", value: `${t.fetchDuration}ms`, color: "text-zinc-100" as const },
                         ]}
                         tag="CSR"
                       />
@@ -840,7 +864,10 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
                         }}
                       >
                         <span className="text-xs text-white px-1.5 truncate font-mono drop-shadow-sm">
-                          {t.name} ({t.fetchDuration}ms)
+                          {t.name}{" "}
+                          {t.queryNames.length > 1
+                            ? `(${t.queryNames.length} queries, ${t.fetchDuration}ms)`
+                            : `(${t.fetchDuration}ms)`}
                         </span>
                       </div>
                     </div>

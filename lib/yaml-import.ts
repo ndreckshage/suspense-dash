@@ -423,7 +423,8 @@ function computeWaterfall(
 
   // Build BoundaryTiming[] with thread simulation
   const ssrTimings: WaterfallTiming[] = scheduled.map((s) => {
-    const queryName = s.info.queries[0]?.queryName ?? "";
+    const queryNames = s.info.queries.map((q) => q.queryName).filter(Boolean);
+    const queryName = queryNames[0] ?? "";
 
     // A boundary is "fully cached" only if all its queries are cached AND
     // there is no remaining prefetch wait time (fetchDuration === 0)
@@ -454,6 +455,7 @@ function computeWaterfall(
       total: Math.round(s.fetchDuration + s.renderCost),
       lcpCritical: s.info.lcpCritical,
       queryName,
+      queryNames,
       cached: isCached,
       subgraphColor,
     };
@@ -477,12 +479,14 @@ function computeWaterfall(
         }
         fetchDuration = Math.max(fetchDuration, qDuration);
       }
+      const csrQueryNames = b.queries.map((q) => q.queryName).filter(Boolean);
       csrTimings.push({
         name: b.name,
         boundaryPath: b.path,
         wallStart: Math.round(csrWallStart),
         fetchDuration: Math.round(fetchDuration),
-        queryName: b.queries[0]?.queryName ?? "",
+        queryName: csrQueryNames[0] ?? "",
+        queryNames: csrQueryNames,
       });
       csrWallStart += fetchDuration + atPctl(b.renderCost, pctl, 1);
     }
