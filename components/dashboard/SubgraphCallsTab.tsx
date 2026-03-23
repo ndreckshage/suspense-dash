@@ -38,10 +38,33 @@ interface SubgraphSummary {
 }
 
 type SloFilter = "exceeded" | "noSlo" | "hasSlo" | null;
+type SortField = "name" | "callsPerReq" | "duration" | "slo" | "status";
+type SortDir = "asc" | "desc";
+
+function getSloSortValue(row: SubgraphSummary): number {
+  if (row.sloMs === 0) return -1; // no SLO sorts last
+  const ratio = row.durationPctl / row.sloMs;
+  if (ratio > 1) return 3;       // exceeded
+  if (ratio > 0.8) return 2;     // warning
+  return 1;                       // ok
+}
 
 export function SubgraphCallsTab({ queries, subgraphOps, pctl, mock }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [sloFilter, setSloFilter] = useState<SloFilter>(null);
+  const [sortField, setSortField] = useState<SortField>("callsPerReq");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+
+  const toggleSort = useCallback((field: SortField) => {
+    setSortField((prev) => {
+      if (prev === field) {
+        setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+      } else {
+        setSortDir(field === "name" ? "asc" : "desc");
+      }
+      return field;
+    });
+  }, []);
   const toggleSloFilter = useCallback(
     (f: "exceeded" | "noSlo" | "hasSlo") => setSloFilter((prev) => (prev === f ? null : f)),
     [],
@@ -199,11 +222,34 @@ export function SubgraphCallsTab({ queries, subgraphOps, pctl, mock }: Props) {
   const pLabel = `p${pctl}`;
 
   const filteredRows = useMemo(() => {
-    if (!sloFilter) return subgraphRows;
-    if (sloFilter === "exceeded") return subgraphRows.filter((r) => r.sloMs > 0 && r.durationPctl > r.sloMs);
-    if (sloFilter === "hasSlo") return subgraphRows.filter((r) => r.sloMs > 0);
-    return subgraphRows.filter((r) => r.sloMs === 0); // noSlo
-  }, [subgraphRows, sloFilter]);
+    let rows = subgraphRows;
+    if (sloFilter === "exceeded") rows = rows.filter((r) => r.sloMs > 0 && r.durationPctl > r.sloMs);
+    else if (sloFilter === "hasSlo") rows = rows.filter((r) => r.sloMs > 0);
+    else if (sloFilter === "noSlo") rows = rows.filter((r) => r.sloMs === 0);
+
+    const sorted = [...rows].sort((a, b) => {
+      let cmp = 0;
+      switch (sortField) {
+        case "name":
+          cmp = a.name.localeCompare(b.name);
+          break;
+        case "callsPerReq":
+          cmp = a.callsPerReq - b.callsPerReq;
+          break;
+        case "duration":
+          cmp = a.durationPctl - b.durationPctl;
+          break;
+        case "slo":
+          cmp = a.sloMs - b.sloMs;
+          break;
+        case "status":
+          cmp = getSloSortValue(a) - getSloSortValue(b);
+          break;
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return sorted;
+  }, [subgraphRows, sloFilter, sortField, sortDir]);
 
   const sloCounts = useMemo(() => {
     const exceeded = subgraphRows.filter((r) => r.sloMs > 0 && r.durationPctl > r.sloMs).length;
@@ -306,19 +352,13 @@ export function SubgraphCallsTab({ queries, subgraphOps, pctl, mock }: Props) {
         <table className="w-full text-sm font-mono table-fixed" style={{ minWidth: "500px" }}>
           <thead>
             <tr className="text-zinc-500 text-xs border-b border-zinc-800">
-              <th className="text-left py-2 px-2 font-normal" style={{ width: "24%" }}>Subgraph</th>
-              <th className="text-right py-2 px-2 font-normal" style={{ width: "12%" }}>
-                Calls/req
-              </th>
-              <th className="text-right py-2 px-2 font-normal" style={{ width: "12%" }}>
-                Duration
-                <br />
-                <span className="text-zinc-600">{pLabel}</span>
-              </th>
-              <th className="text-right py-2 px-2 font-normal" style={{ width: "10%" }}>SLO</th>
-              <th className="text-center py-2 px-2 font-normal" style={{ width: "8%" }}>Status</th>
-              <th className="py-2 px-2 font-normal" style={{ width: "34%" }}>
-                <span className="sr-only">Distribution</span>
+              <SortableHeader field="name" label="Subgraph" sortField={sortField} sortDir={sortDir} onSort={toggleSort} align="left" style={{ width: "24%" }} />
+              <SortableHeader field="callsPerReq" label="Calls/req" sortField={sortField} sortDir={sortDir} onSort={toggleSort} align="right" style={{ width: "12%" }} />
+              <SortableHeader field="duration" label="Duration" subLabel={pLabel} sortField={sortField} sortDir={sortDir} onSort={toggleSort} align="right" style={{ width: "12%" }} />
+              <SortableHeader field="slo" label="SLO" sortField={sortField} sortDir={sortDir} onSort={toggleSort} align="right" style={{ width: "10%" }} />
+              <SortableHeader field="status" label="Status" sortField={sortField} sortDir={sortDir} onSort={toggleSort} align="center" style={{ width: "8%" }} />
+              <th className="py-2 px-2 font-normal text-left text-zinc-600" style={{ width: "34%" }}>
+                Calls/req distribution
               </th>
             </tr>
           </thead>
@@ -463,5 +503,44 @@ function SubgraphRow({
           );
         })}
     </>
+  );
+}
+
+function SortableHeader({
+  field,
+  label,
+  subLabel,
+  sortField,
+  sortDir,
+  onSort,
+  align,
+  style,
+}: {
+  field: SortField;
+  label: string;
+  subLabel?: string;
+  sortField: SortField;
+  sortDir: SortDir;
+  onSort: (f: SortField) => void;
+  align: "left" | "right" | "center";
+  style?: React.CSSProperties;
+}) {
+  const active = sortField === field;
+  const arrow = active ? (sortDir === "asc" ? " \u25B4" : " \u25BE") : "";
+  const textAlign = align === "left" ? "text-left" : align === "right" ? "text-right" : "text-center";
+  return (
+    <th
+      className={`${textAlign} py-2 px-2 font-normal cursor-pointer select-none hover:text-zinc-300 transition-colors ${active ? "text-zinc-300" : ""}`}
+      style={style}
+      onClick={() => onSort(field)}
+    >
+      {label}{arrow}
+      {subLabel && (
+        <>
+          <br />
+          <span className="text-zinc-600">{subLabel}</span>
+        </>
+      )}
+    </th>
   );
 }
