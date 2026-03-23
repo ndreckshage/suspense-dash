@@ -10,7 +10,7 @@ export function SlowModeToggle({ initialSlow }: { initialSlow: boolean }) {
     } else {
       url.searchParams.set("slow", "1");
     }
-    window.location.href = url.toString();
+    window.location.href = decodeURIComponent(url.toString());
   }, [initialSlow]);
 
   return (

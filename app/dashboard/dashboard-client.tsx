@@ -42,7 +42,7 @@ export function DashboardClient({
     } else {
       url.searchParams.set("tab", tab);
     }
-    window.history.replaceState({}, "", url.toString());
+    window.history.replaceState({}, "", decodeURIComponent(url.toString()));
   }, []);
 
   // Sync tab state on browser back/forward
