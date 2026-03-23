@@ -834,132 +834,187 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
       )}
 
       {/* Long Animation Frames */}
-      {timelineScope === "full" && <div>
-        <div className="text-xs text-zinc-400 mb-2 font-medium">
-          CSR Main Thread{" "}
-          <span className="text-zinc-600">(long animation frames &gt;50ms)</span>
-        </div>
-        <div className="relative bg-zinc-900 rounded border border-zinc-800 p-3">
-          {/* Grid lines */}
-          <div className="absolute inset-3 flex justify-between pointer-events-none">
-            {[0, 25, 50, 75, 100].map((pct) => (
-              <div
-                key={pct}
-                className="w-px bg-zinc-800"
-                style={{ height: "100%" }}
-              />
-            ))}
-          </div>
+      {timelineScope === "full" && (() => {
+        // Merge LoAF entries that are within 20ms of each other into groups
+        const mergedLoaf: {
+          startTime: number;
+          endTime: number;
+          totalDuration: number;
+          totalBlocking: number;
+          entries: typeof aggregatedLoaf;
+        }[] = [];
 
-          {aggregatedLoaf.length > 0 ? (
-            <div className="space-y-1.5 relative z-10">
-              {aggregatedLoaf.map((entry, i) => {
-                const leftPct = (entry.startTime / maxMs) * 100;
-                const totalWidthPct = Math.max(
-                  (entry.duration / maxMs) * 100,
-                  1.5,
-                );
-                const blockingWidthPct = (entry.blockingDuration / maxMs) * 100;
-                const scriptSummary =
-                  entry.scripts.length > 0
-                    ? entry.scripts
-                        .map((s) => {
-                          const file = s.sourceURL.split("/").pop() ?? s.sourceURL;
-                          return s.sourceFunctionName
-                            ? `${s.sourceFunctionName} (${file})`
-                            : file;
-                        })
-                        .join(", ")
-                    : "";
+        const sorted = [...aggregatedLoaf].sort((a, b) => a.startTime - b.startTime);
+        for (const entry of sorted) {
+          const entryEnd = entry.startTime + entry.duration;
+          const last = mergedLoaf[mergedLoaf.length - 1];
+          if (last && entry.startTime - last.endTime <= 20) {
+            // Merge into previous group
+            last.endTime = Math.max(last.endTime, entryEnd);
+            last.totalDuration += entry.duration;
+            last.totalBlocking += entry.blockingDuration;
+            last.entries.push(entry);
+          } else {
+            mergedLoaf.push({
+              startTime: entry.startTime,
+              endTime: entryEnd,
+              totalDuration: entry.duration,
+              totalBlocking: entry.blockingDuration,
+              entries: [entry],
+            });
+          }
+        }
 
-                const loafLines: TooltipLine[] = [
-                  { label: "Start", value: `${Math.round(entry.startTime)}ms` },
-                  { label: "Total duration", value: `${Math.round(entry.duration)}ms` },
-                  { label: "Blocking", value: `${Math.round(entry.blockingDuration)}ms`, color: "text-red-400" },
-                  ...entry.scripts.map((s) => {
-                    const file = s.sourceURL.split("/").pop() ?? s.sourceURL;
-                    const fn = s.sourceFunctionName || "(anonymous)";
-                    return { label: fn, value: `${file} (${s.duration}ms)`, color: "text-zinc-400" as string };
-                  }),
-                ];
+        const totalBlockingTime = aggregatedLoaf.reduce((sum, e) => sum + e.blockingDuration, 0);
 
-                return (
-                  <Tooltip
-                    key={i}
-                    content={<TooltipContent title="Long Animation Frame" lines={loafLines} tag="LoAF" />}
-                  >
-                    <div className="relative h-9 md:h-7">
-                      {/* Total duration (dimmer) */}
-                      <div
-                        className="absolute top-0 h-full rounded overflow-hidden cursor-default"
+        return (
+          <div>
+            <div className="text-xs text-zinc-400 mb-2 font-medium flex items-center gap-2">
+              <span>
+                CSR Main Thread{" "}
+                <span className="text-zinc-600">(long animation frames &gt;50ms)</span>
+              </span>
+              {totalBlockingTime > 0 && (
+                <span className="text-red-400 font-mono">
+                  {Math.round(totalBlockingTime)}ms total blocking
+                </span>
+              )}
+            </div>
+            <div className="relative bg-zinc-900 rounded border border-zinc-800 p-3 overflow-hidden">
+              {/* Grid lines */}
+              <div className="absolute inset-3 flex justify-between pointer-events-none">
+                {[0, 25, 50, 75, 100].map((pct) => (
+                  <div
+                    key={pct}
+                    className="w-px bg-zinc-800"
+                    style={{ height: "100%" }}
+                  />
+                ))}
+              </div>
+
+              {mergedLoaf.length > 0 ? (
+                <div className="relative h-10 md:h-8 z-10">
+                  {mergedLoaf.map((group, i) => {
+                    const leftPct = (group.startTime / maxMs) * 100;
+                    const spanWidth = group.endTime - group.startTime;
+                    const totalWidthPct = Math.max(
+                      (spanWidth / maxMs) * 100,
+                      1.5,
+                    );
+                    const blockingWidthPct = Math.max(
+                      (group.totalBlocking / maxMs) * 100,
+                      1,
+                    );
+
+                    const allScripts = group.entries.flatMap((e) => e.scripts);
+                    const scriptSummary =
+                      allScripts.length > 0
+                        ? allScripts
+                            .map((s) => {
+                              const file = s.sourceURL.split("/").pop() ?? s.sourceURL;
+                              return s.sourceFunctionName
+                                ? `${s.sourceFunctionName} (${file})`
+                                : file;
+                            })
+                            .join(", ")
+                        : "";
+
+                    const loafLines: TooltipLine[] = [
+                      { label: "Start", value: `${Math.round(group.startTime)}ms` },
+                      { label: "Span", value: `${Math.round(spanWidth)}ms` },
+                      ...(group.entries.length > 1
+                        ? [{ label: "Frames", value: `${group.entries.length} LoAFs merged` }]
+                        : []),
+                      { label: "Total duration", value: `${Math.round(group.totalDuration)}ms` },
+                      { label: "Blocking", value: `${Math.round(group.totalBlocking)}ms`, color: "text-red-400" },
+                      ...allScripts.map((s) => {
+                        const file = s.sourceURL.split("/").pop() ?? s.sourceURL;
+                        const fn = s.sourceFunctionName || "(anonymous)";
+                        return { label: fn, value: `${file} (${s.duration}ms)`, color: "text-zinc-400" as string };
+                      }),
+                    ];
+
+                    return (
+                      <Tooltip
+                        key={i}
+                        className="absolute top-0 h-full cursor-default"
                         style={{
                           left: `${leftPct}%`,
                           width: `${totalWidthPct}%`,
-                          backgroundColor: "rgb(239, 68, 68)",
-                          opacity: 0.3,
                         }}
-                      />
-                      {/* Blocking duration (bright) */}
-                      <div
-                        className="absolute top-0 h-full rounded flex items-center overflow-hidden cursor-default"
-                        style={{
-                          left: `${leftPct}%`,
-                          width: `${Math.max(blockingWidthPct, 1)}%`,
-                          backgroundColor: "rgb(239, 68, 68)",
-                          opacity: 0.8,
-                        }}
+                        content={<TooltipContent title={group.entries.length > 1 ? `${group.entries.length} Long Animation Frames` : "Long Animation Frame"} lines={loafLines} tag="LoAF" />}
                       >
-                        <span className="text-xs text-white px-1.5 truncate font-mono">
-                          {Math.round(entry.blockingDuration)}ms blocking
-                          {scriptSummary && (
-                            <span className="text-red-200 ml-1">
-                              {scriptSummary}
-                            </span>
-                          )}
-                        </span>
-                      </div>
-                    </div>
-                  </Tooltip>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="relative h-7 flex items-center">
-              <span className="text-xs text-zinc-600 font-mono">
-                No long animation frames detected during initialization
-              </span>
-            </div>
-          )}
+                        {/* Total duration (dimmer) */}
+                        <div
+                          className="absolute top-0 left-0 h-full rounded cursor-default"
+                          style={{
+                            width: "100%",
+                            backgroundColor: "rgb(239, 68, 68)",
+                            opacity: 0.3,
+                          }}
+                        />
+                        {/* Blocking duration (bright) */}
+                        <div
+                          className="absolute top-0 left-0 h-full rounded flex items-center overflow-hidden cursor-default"
+                          style={{
+                            width: `${Math.min((group.totalBlocking / spanWidth) * 100, 100)}%`,
+                            minWidth: "20px",
+                            backgroundColor: "rgb(239, 68, 68)",
+                            opacity: 0.8,
+                          }}
+                        >
+                          <span className="text-xs text-white px-1.5 truncate font-mono">
+                            {Math.round(group.totalBlocking)}ms blocking
+                            {scriptSummary && (
+                              <span className="text-red-200 ml-1">
+                                {scriptSummary}
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                      </Tooltip>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="relative h-7 flex items-center">
+                  <span className="text-xs text-zinc-600 font-mono">
+                    No long animation frames detected during initialization
+                  </span>
+                </div>
+              )}
 
-          {/* Vertical marker lines */}
-          {lcpDataReady > 0 && (
-            <div
-              className="absolute top-3 bottom-3 w-px bg-blue-400/50 z-0"
-              style={{ left: `calc(${(lcpDataReady / maxMs) * 100}% + 12px)` }}
-            />
-          )}
-          {lcpRendered > 0 && (
-            <div
-              className="absolute top-3 bottom-3 w-px bg-green-400/40 z-0"
-              style={{ left: `calc(${(lcpRendered / maxMs) * 100}% + 12px)` }}
-            />
-          )}
-          {hydrationMs > 0 && (
-            <div
-              className="absolute top-3 bottom-3 w-px border-l border-dashed border-amber-400/60 z-0"
-              style={{
-                left: `calc(${(hydrationMs / maxMs) * 100}% + 12px)`,
-              }}
-            />
-          )}
-          {csrInitComplete > 0 && (
-            <div
-              className="absolute top-3 bottom-3 w-px bg-purple-400/40 z-0"
-              style={{ left: `calc(${(csrInitComplete / maxMs) * 100}% + 12px)` }}
-            />
-          )}
-        </div>
-      </div>}
+              {/* Vertical marker lines */}
+              {lcpDataReady > 0 && (
+                <div
+                  className="absolute top-3 bottom-3 w-px bg-blue-400/50 z-0"
+                  style={{ left: `calc(${(lcpDataReady / maxMs) * 100}% + 12px)` }}
+                />
+              )}
+              {lcpRendered > 0 && (
+                <div
+                  className="absolute top-3 bottom-3 w-px bg-green-400/40 z-0"
+                  style={{ left: `calc(${(lcpRendered / maxMs) * 100}% + 12px)` }}
+                />
+              )}
+              {hydrationMs > 0 && (
+                <div
+                  className="absolute top-3 bottom-3 w-px border-l border-dashed border-amber-400/60 z-0"
+                  style={{
+                    left: `calc(${(hydrationMs / maxMs) * 100}% + 12px)`,
+                  }}
+                />
+              )}
+              {csrInitComplete > 0 && (
+                <div
+                  className="absolute top-3 bottom-3 w-px bg-purple-400/40 z-0"
+                  style={{ left: `calc(${(csrInitComplete / maxMs) * 100}% + 12px)` }}
+                />
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Summary */}
       <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs font-mono">
