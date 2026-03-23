@@ -14,6 +14,7 @@ import { percentile, median as medianUtil } from "@/lib/percentile";
 import type { MockTreeData } from "@/lib/mock-metrics";
 import { buildSubgraphColorMap, DEFAULT_SUBGRAPH_COLOR } from "@/lib/subgraph-colors";
 import { TabDescription } from "./TabDescription";
+import { Tooltip } from "./Tooltip";
 
 interface Props {
   boundaries: BoundaryMetric[];
@@ -1029,12 +1030,23 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
               node.subgraphName != null &&
               !selectedSubgraphs.has(node.subgraphName);
 
+            const isClickExpandable =
+              (node.type === "boundary" && node.hasChildren) ||
+              (node.type === "query" && queryHasChildren.has(node.path));
+            const handleRowClick = isClickExpandable
+              ? () => {
+                  if (node.type === "boundary") toggleExpand(node.boundaryPath);
+                  else if (node.type === "query") toggleQueryExpand(node.path);
+                }
+              : undefined;
+
             return (
               <tr
                 key={node.path}
                 className={`border-b border-zinc-800/50 hover:bg-zinc-800/30 ${
                   node.lcpCritical ? "border-l-2 border-l-blue-500/50" : ""
-                } ${isDimmedByFilter ? "opacity-30" : ""}`}
+                } ${isDimmedByFilter ? "opacity-30" : ""} ${isClickExpandable ? "cursor-pointer" : ""}`}
+                onClick={handleRowClick}
               >
                 <td className="py-1.5 px-2">
                   <div
@@ -1048,7 +1060,7 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
                     )}
                     {node.type === "boundary" && node.hasChildren ? (
                       <button
-                        onClick={() => toggleExpand(node.boundaryPath)}
+                        onClick={(e) => { e.stopPropagation(); toggleExpand(node.boundaryPath); }}
                         className="text-zinc-500 hover:text-zinc-300 mr-1 flex-shrink-0 w-4 text-center"
                       >
                         {isExpanded ? "\u25BE" : "\u25B8"}
@@ -1073,7 +1085,7 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
                       <span className={`flex items-center ${node.cached ? "opacity-50" : ""}`}>
                         {queryHasChildren.has(node.path) ? (
                           <button
-                            onClick={() => toggleQueryExpand(node.path)}
+                            onClick={(e) => { e.stopPropagation(); toggleQueryExpand(node.path); }}
                             className="text-zinc-500 hover:text-zinc-300 mr-1 flex-shrink-0 w-4 text-center"
                           >
                             {isQueryExpanded ? "\u25BE" : "\u25B8"}
@@ -1093,14 +1105,18 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
                       </span>
                     )}
                     {node.lcpCritical && (
-                      <span className="ml-1.5 text-blue-400 text-xs" title="LCP Critical">
-                        LCP
-                      </span>
+                      <Tooltip content="LCP Critical" className="inline-flex ml-1.5">
+                        <span className="text-blue-400 text-xs">
+                          LCP
+                        </span>
+                      </Tooltip>
                     )}
                     {node.type === "boundary" && node.phase === "csr" && (
-                      <span className="ml-1.5 text-violet-400 text-xs" title="Client Component">
-                        CSR
-                      </span>
+                      <Tooltip content="Client Component" className="inline-flex ml-1.5">
+                        <span className="text-violet-400 text-xs">
+                          CSR
+                        </span>
+                      </Tooltip>
                     )}
                   </div>
                 </td>

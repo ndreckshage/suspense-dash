@@ -10,6 +10,7 @@ import { percentile } from "@/lib/percentile";
 import type { MockSubgraphData } from "@/lib/mock-metrics";
 import { buildSubgraphColorMap, DEFAULT_SUBGRAPH_COLOR } from "@/lib/subgraph-colors";
 import { TabDescription } from "./TabDescription";
+import { Tooltip } from "./Tooltip";
 
 interface Props {
   queries: QueryMetric[];
@@ -433,7 +434,16 @@ function SubgraphRow({
             className="border-b border-zinc-800/30 bg-zinc-900/50"
           >
             <td className="py-1 px-2" colSpan={2}>
-              <div className="flex items-center gap-1.5 pl-9 min-w-0" title={fullLabel}>
+              <Tooltip
+                content={
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-teal-400">{caller.queryName}</span>
+                    <span className="text-zinc-500">&rarr;</span>
+                    <span className="text-zinc-300">{component}</span>
+                  </div>
+                }
+                className="flex items-center gap-1.5 pl-9 min-w-0"
+              >
                 <span className="text-zinc-600 flex-shrink-0">&#x2514;</span>
                 <span className="text-teal-400 text-xs truncate max-w-[80px]">{caller.queryName}</span>
                 <span className="text-zinc-600 text-xs flex-shrink-0">&rarr;</span>
@@ -443,7 +453,7 @@ function SubgraphRow({
                     client
                   </span>
                 )}
-              </div>
+              </Tooltip>
             </td>
             <td className="text-right py-1 px-2 text-zinc-500 text-xs">
               {caller.durationPctl > 0 ? `${caller.durationPctl}ms` : ""}
