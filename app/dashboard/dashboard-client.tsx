@@ -85,7 +85,9 @@ export function DashboardClient({
     fetch(runUrl)
       .then((res) => {
         if (!res.ok)
-          throw new Error(`Failed to fetch YAML: ${res.status} ${res.statusText}`);
+          throw new Error(
+            `Failed to fetch YAML: ${res.status} ${res.statusText}`,
+          );
         return res.text();
       })
       .then((text) => {
@@ -95,7 +97,9 @@ export function DashboardClient({
       })
       .catch((err) => {
         if (cancelled) return;
-        setUrlError(err instanceof Error ? err.message : "Failed to load YAML from URL");
+        setUrlError(
+          err instanceof Error ? err.message : "Failed to load YAML from URL",
+        );
         setLoading(false);
       });
     return () => {
@@ -165,7 +169,9 @@ export function DashboardClient({
               <span className="text-xs text-zinc-500 truncate sm:hidden">
                 {isMock
                   ? mockData.route
-                  : metrics ? `${metrics.totalPageLoads} loads` : "loading..."}
+                  : metrics
+                    ? `${metrics.totalPageLoads} loads`
+                    : "loading..."}
               </span>
             </div>
           </div>
@@ -203,7 +209,7 @@ export function DashboardClient({
                 : "border-transparent text-zinc-500 hover:text-zinc-300"
             }`}
           >
-            Suspense Path
+            Suspense Waterfall
           </button>
           <button
             onClick={() => setActiveTab("tree")}

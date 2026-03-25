@@ -4,7 +4,11 @@ import { useMemo, useState, useCallback } from "react";
 import type { BoundaryMetric, QueryMetric } from "@/lib/metrics-store";
 import type { LoAFEntry, NavigationTiming } from "@/lib/client-metrics-store";
 import type { MockWaterfallData } from "@/lib/mock-metrics";
-import { filterLoafsByCsrCutoff, mergeLoafEntries, getLastCsrQueryStart } from "@/lib/loaf-utils";
+import {
+  filterLoafsByCsrCutoff,
+  mergeLoafEntries,
+  getLastCsrQueryStart,
+} from "@/lib/loaf-utils";
 import { TabDescription } from "./TabDescription";
 import { Tooltip, TooltipContent } from "./Tooltip";
 import type { TooltipLine } from "./Tooltip";
@@ -56,8 +60,18 @@ const BOUNDARY_COLORS: Record<string, string> = {
   ReviewsQA: "rgb(34, 197, 94)",
 };
 
-export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, loafEntries, navigationTimings, mock }: Props) {
-  const [timelineScope, setTimelineScope] = useState<"lcp" | "ssr" | "full">("full");
+export function CriticalInitPath({
+  boundaries,
+  queries,
+  pctl,
+  hydrationTimes,
+  loafEntries,
+  navigationTimings,
+  mock,
+}: Props) {
+  const [timelineScope, setTimelineScope] = useState<"lcp" | "ssr" | "full">(
+    "full",
+  );
   // Separate SSR and CSR metrics
   const ssrBoundaries = useMemo(
     () => boundaries.filter((b) => b.phase !== "csr"),
@@ -146,127 +160,143 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
     return navigationTimings[representativeRequestId] ?? null;
   }, [navigationTimings, representativeRequestId, pctl, mock]);
 
-  const { timings, lcpDataReady, lcpRendered, lcpBlocked, lcpDisplayed, shellEnd } =
-    useMemo(() => {
-      const emptyResult = {
-        timings: [] as BoundaryTiming[],
-        lcpDataReady: 0,
-        lcpRendered: 0,
-        lcpBlocked: 0,
-        lcpDisplayed: 0,
-        shellEnd: 0,
-      };
+  const {
+    timings,
+    lcpDataReady,
+    lcpRendered,
+    lcpBlocked,
+    lcpDisplayed,
+    shellEnd,
+  } = useMemo(() => {
+    const emptyResult = {
+      timings: [] as BoundaryTiming[],
+      lcpDataReady: 0,
+      lcpRendered: 0,
+      lcpBlocked: 0,
+      lcpDisplayed: 0,
+      shellEnd: 0,
+    };
 
-      // Mock data path — use pre-computed timings
-      const mockData = mock?.[pctl];
-      let rawTimings: BoundaryTiming[] | null = mockData
-        ? mockData.ssrTimings.map((t) => ({ ...t }))
-        : null;
+    // Mock data path — use pre-computed timings
+    const mockData = mock?.[pctl];
+    let rawTimings: BoundaryTiming[] | null = mockData
+      ? mockData.ssrTimings.map((t) => ({ ...t }))
+      : null;
 
-      // Live data path — build from representative load
-      if (!rawTimings) {
-        if (!representativeRequestId) return emptyResult;
+    // Live data path — build from representative load
+    if (!rawTimings) {
+      if (!representativeRequestId) return emptyResult;
 
-        const repBoundaries = ssrBoundaries.filter(
-          (b) => b.requestId === representativeRequestId,
-        );
-        const repQueries = ssrQueries.filter(
-          (q) => q.requestId === representativeRequestId,
-        );
-        if (repBoundaries.length === 0) return emptyResult;
+      const repBoundaries = ssrBoundaries.filter(
+        (b) => b.requestId === representativeRequestId,
+      );
+      const repQueries = ssrQueries.filter(
+        (q) => q.requestId === representativeRequestId,
+      );
+      if (repBoundaries.length === 0) return emptyResult;
 
-        const queryNamesByPath = new Map<string, string[]>();
-        const queryByKey = new Map<string, QueryMetric[]>();
-        for (const q of repQueries) {
-          const names = queryNamesByPath.get(q.boundary_path) ?? [];
-          if (!names.includes(q.queryName)) names.push(q.queryName);
-          queryNamesByPath.set(q.boundary_path, names);
-          const key = `${q.boundary_path}:${q.queryName}`;
-          const list = queryByKey.get(key) ?? [];
-          list.push(q);
-          queryByKey.set(key, list);
-        }
-
-        rawTimings = repBoundaries
-          .sort((a, b) => a.wall_start_ms - b.wall_start_ms)
-          .map((m) => {
-            const name = m.boundary_path.split(".").pop()!;
-            const queryNames = queryNamesByPath.get(m.boundary_path) ?? [];
-            const queryName = queryNames[0] ?? "";
-
-            // Check if ALL queries for this boundary are fully cached
-            const allQMetrics = queryNames.flatMap((qn) => queryByKey.get(`${m.boundary_path}:${qn}`) ?? []);
-            const isCached =
-              allQMetrics.length > 0 && allQMetrics.every((q) => q.fullyCached);
-
-            return {
-              name,
-              boundaryPath: m.boundary_path,
-              wallStart: m.wall_start_ms,
-              fetchDuration: isCached
-                ? 0
-                : (m.fetch_duration_ms ?? m.render_duration_ms),
-              renderCost: m.render_cost_ms ?? 0,
-              blocked: 0,
-              total: m.render_duration_ms,
-              lcpCritical: m.is_lcp_critical,
-              queryName,
-              queryNames,
-              cached: isCached,
-            };
-          });
+      const queryNamesByPath = new Map<string, string[]>();
+      const queryByKey = new Map<string, QueryMetric[]>();
+      for (const q of repQueries) {
+        const names = queryNamesByPath.get(q.boundary_path) ?? [];
+        if (!names.includes(q.queryName)) names.push(q.queryName);
+        queryNamesByPath.set(q.boundary_path, names);
+        const key = `${q.boundary_path}:${q.queryName}`;
+        const list = queryByKey.get(key) ?? [];
+        list.push(q);
+        queryByKey.set(key, list);
       }
 
-      const timings = rawTimings!;
+      rawTimings = repBoundaries
+        .sort((a, b) => a.wall_start_ms - b.wall_start_ms)
+        .map((m) => {
+          const name = m.boundary_path.split(".").pop()!;
+          const queryNames = queryNamesByPath.get(m.boundary_path) ?? [];
+          const queryName = queryNames[0] ?? "";
 
-      // Thread simulation for blocked_ms
-      const sortedByFetchEnd = [...timings]
-        .filter((t) => t.renderCost > 0)
-        .sort(
-          (a, b) =>
-            a.wallStart + a.fetchDuration - (b.wallStart + b.fetchDuration),
-        );
-      let cursor = 0;
-      for (const t of sortedByFetchEnd) {
-        const fetchEnd = t.wallStart + t.fetchDuration;
-        const renderStart = Math.max(cursor, fetchEnd);
-        t.blocked = Math.max(0, Math.round(renderStart - fetchEnd));
-        cursor = renderStart + t.renderCost;
-      }
+          // Check if ALL queries for this boundary are fully cached
+          const allQMetrics = queryNames.flatMap(
+            (qn) => queryByKey.get(`${m.boundary_path}:${qn}`) ?? [],
+          );
+          const isCached =
+            allQMetrics.length > 0 && allQMetrics.every((q) => q.fullyCached);
 
-      // Shell end time (waterfall marker)
-      const layout = timings.find((t) => t.name === "Layout");
-      const shellEnd = layout
-        ? layout.wallStart + layout.fetchDuration + layout.renderCost
-        : 0;
+          return {
+            name,
+            boundaryPath: m.boundary_path,
+            wallStart: m.wall_start_ms,
+            fetchDuration: isCached
+              ? 0
+              : (m.fetch_duration_ms ?? m.render_duration_ms),
+            renderCost: m.render_cost_ms ?? 0,
+            blocked: 0,
+            total: m.render_duration_ms,
+            lcpCritical: m.is_lcp_critical,
+            queryName,
+            queryNames,
+            cached: isCached,
+          };
+        });
+    }
 
-      // LCP boundary — use the last lcpCritical boundary (the actual LCP element,
-      // not its ancestors which may also be marked critical)
-      const lcpCriticalTimings = timings.filter((t) => t.lcpCritical);
-      const lcpBoundary = lcpCriticalTimings.length > 0
+    const timings = rawTimings!;
+
+    // Thread simulation for blocked_ms
+    const sortedByFetchEnd = [...timings]
+      .filter((t) => t.renderCost > 0)
+      .sort(
+        (a, b) =>
+          a.wallStart + a.fetchDuration - (b.wallStart + b.fetchDuration),
+      );
+    let cursor = 0;
+    for (const t of sortedByFetchEnd) {
+      const fetchEnd = t.wallStart + t.fetchDuration;
+      const renderStart = Math.max(cursor, fetchEnd);
+      t.blocked = Math.max(0, Math.round(renderStart - fetchEnd));
+      cursor = renderStart + t.renderCost;
+    }
+
+    // Shell end time (waterfall marker)
+    const layout = timings.find((t) => t.name === "Layout");
+    const shellEnd = layout
+      ? layout.wallStart + layout.fetchDuration + layout.renderCost
+      : 0;
+
+    // LCP boundary — use the last lcpCritical boundary (the actual LCP element,
+    // not its ancestors which may also be marked critical)
+    const lcpCriticalTimings = timings.filter((t) => t.lcpCritical);
+    const lcpBoundary =
+      lcpCriticalTimings.length > 0
         ? lcpCriticalTimings[lcpCriticalTimings.length - 1]
         : null;
-      const lcpDataReady = lcpBoundary
-        ? lcpBoundary.wallStart + lcpBoundary.fetchDuration
-        : 0;
-      const lcpRendered = lcpBoundary
-        ? lcpBoundary.wallStart +
-          lcpBoundary.fetchDuration +
-          lcpBoundary.blocked +
-          lcpBoundary.renderCost
-        : 0;
-      const lcpBlocked = lcpBoundary?.blocked ?? 0;
-      const lcpDisplayed = lcpRendered > 0 ? lcpRendered + lcpImageLatencyMs : 0;
+    const lcpDataReady = lcpBoundary
+      ? lcpBoundary.wallStart + lcpBoundary.fetchDuration
+      : 0;
+    const lcpRendered = lcpBoundary
+      ? lcpBoundary.wallStart +
+        lcpBoundary.fetchDuration +
+        lcpBoundary.blocked +
+        lcpBoundary.renderCost
+      : 0;
+    const lcpBlocked = lcpBoundary?.blocked ?? 0;
+    const lcpDisplayed = lcpRendered > 0 ? lcpRendered + lcpImageLatencyMs : 0;
 
-      return {
-        timings,
-        lcpDataReady,
-        lcpRendered,
-        lcpBlocked,
-        lcpDisplayed,
-        shellEnd,
-      };
-    }, [ssrBoundaries, ssrQueries, representativeRequestId, pctl, mock, lcpImageLatencyMs]);
+    return {
+      timings,
+      lcpDataReady,
+      lcpRendered,
+      lcpBlocked,
+      lcpDisplayed,
+      shellEnd,
+    };
+  }, [
+    ssrBoundaries,
+    ssrQueries,
+    representativeRequestId,
+    pctl,
+    mock,
+    lcpImageLatencyMs,
+  ]);
 
   // Compute CSR query timings for visualization
   const csrTimings = useMemo(() => {
@@ -308,9 +338,7 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
   // CSR init complete time (latest CSR query end)
   const csrInitComplete = useMemo(() => {
     if (csrTimings.length === 0) return 0;
-    return Math.max(
-      ...csrTimings.map((t) => t.wallStart + t.fetchDuration),
-    );
+    return Math.max(...csrTimings.map((t) => t.wallStart + t.fetchDuration));
   }, [csrTimings]);
 
   // Last CSR query start time — LoAFs starting after this are excluded
@@ -327,20 +355,20 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
     if (timelineScope === "lcp") {
       // LCP-only: cap timeline right after LCP displayed + 10% padding
       const totalMs = Math.max(lcpDisplayed, lcpRendered, 1);
-      return Math.ceil(totalMs * 1.10);
+      return Math.ceil(totalMs * 1.1);
     }
 
     if (timelineScope === "ssr") {
       // SSR-only: cap timeline at the last SSR boundary end
       const totalMs = Math.max(...ssrEnds, lcpRendered, 1);
-      return Math.ceil(totalMs * 1.10);
+      return Math.ceil(totalMs * 1.1);
     }
 
     // Full scope: cap at ~10% after the latest milestone
     // Use csrInitComplete (computed end of CSR queries) — not initializationMs
     // which is a static YAML value that can extend the scale past visible content
     const totalMs = Math.max(...ssrEnds, lcpRendered, csrInitComplete, 1);
-    return Math.ceil(totalMs * 1.10);
+    return Math.ceil(totalMs * 1.1);
   }, [timings, lcpRendered, lcpDisplayed, csrInitComplete, timelineScope]);
 
   if (timings.length === 0) {
@@ -380,32 +408,53 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
   }
 
   return (
-    <div className="space-y-6 overflow-x-auto overflow-y-hidden md:overflow-x-hidden" style={{ minWidth: 0 }}>
+    <div
+      className="space-y-6 overflow-x-auto overflow-y-hidden md:overflow-x-hidden"
+      style={{ minWidth: 0 }}
+    >
       <TabDescription title="What does this measure?" storageKey="waterfall">
         <p>
-          This waterfall shows everything that happens to render the page <strong className="text-zinc-300">before
-          any user interaction</strong> (scroll, click, tap). Think of it like a Core Web Vitals measurement
+          This waterfall shows everything that happens to render the page{" "}
+          <strong className="text-zinc-300">before any user interaction</strong>{" "}
+          (scroll, click, tap). Think of it like a Core Web Vitals measurement
           window — once the user interacts, we stop the clock.
         </p>
         <p>
-          <strong className="text-zinc-300">Hydration</strong> is the time React spends making server-rendered
-          HTML interactive. During hydration, the page looks loaded but buttons and links may not respond yet.
-          After hydration completes, <strong className="text-zinc-300">client-side effects</strong> run —
-          data fetches from CSR Suspense boundaries, useEffect callbacks, and components rendering with real data.
-          Note that client-side effects compete for the main thread, so more CSR work can increase contention
-          and delay interactivity. The waterfall covers both phases: server-side streaming and post-hydration effects.
+          <strong className="text-zinc-300">Hydration</strong> is the time React
+          spends making server-rendered HTML interactive. During hydration, the
+          page looks loaded but buttons and links may not respond yet. After
+          hydration completes,{" "}
+          <strong className="text-zinc-300">client-side effects</strong> run —
+          data fetches from CSR Suspense boundaries, useEffect callbacks, and
+          components rendering with real data. Note that client-side effects
+          compete for the main thread, so more CSR work can increase contention
+          and delay interactivity. The waterfall covers both phases: server-side
+          streaming and post-hydration effects.
         </p>
         <p>
-          Each bar represents a <strong className="text-zinc-300">Suspense boundary</strong> — an independent
-          section of the page that can load and display its content on its own timeline. The bar width shows
-          how long that section&apos;s data fetch took. The position shows when it started relative to the page
-          request. The <strong className="text-zinc-300">LCP data ready</strong> marker shows when the largest
-          visible content had all its data.
+          Each bar represents a{" "}
+          <strong className="text-zinc-300">Suspense boundary</strong> — an
+          independent section of the page that can load and display its content
+          on its own timeline. The bar width shows how long that section&apos;s
+          data fetch took. The position shows when it started relative to the
+          page request. The{" "}
+          <strong className="text-zinc-300">LCP data ready</strong> marker shows
+          when the largest visible content had all its data.
         </p>
       </TabDescription>
       {/* Scope toggle */}
       <div className="flex items-center gap-1 text-xs">
         <span className="text-zinc-600 mr-1">Scope:</span>
+        <button
+          onClick={() => setTimelineScope("full")}
+          className={`px-2 py-0.5 rounded-full border transition-all ${
+            timelineScope === "full"
+              ? "border-purple-500 text-purple-300 bg-purple-500/10"
+              : "border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50"
+          }`}
+        >
+          Full Init
+        </button>
         <button
           onClick={() => setTimelineScope("lcp")}
           className={`px-2 py-0.5 rounded-full border transition-all ${
@@ -426,388 +475,132 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
         >
           SSR Only
         </button>
-        <button
-          onClick={() => setTimelineScope("full")}
-          className={`px-2 py-0.5 rounded-full border transition-all ${
-            timelineScope === "full"
-              ? "border-purple-500 text-purple-300 bg-purple-500/10"
-              : "border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50"
-          }`}
-        >
-          Full Init
-        </button>
       </div>
 
       <div className="min-w-[600px] md:min-w-0 space-y-6 overflow-hidden">
-      {/* Time axis + marker labels */}
-      <div>
-        <div className="flex justify-between text-xs text-zinc-600 font-mono">
-          <span>0ms</span>
-          <span>{Math.round(maxMs / 4)}ms</span>
-          <span>{Math.round(maxMs / 2)}ms</span>
-          <span>{Math.round((maxMs * 3) / 4)}ms</span>
-          <span>{maxMs}ms</span>
-        </div>
-        <div className="mt-1 space-y-0 overflow-hidden">
-          {lcpDataReady > 0 && (
-            <Tooltip content={`LCP data ready at ${lcpDataReady}ms — all data for the LCP boundary has been fetched`}>
-              <div className="relative h-4">
-                <div
-                  className="absolute top-0 flex items-center"
-                  style={{ left: `calc(${(lcpDataReady / maxMs) * 100}% + 13px)` }}
-                >
-                  <div className="w-px h-3 bg-blue-400" />
-                  <span className="text-[10px] text-blue-400 ml-1 font-mono whitespace-nowrap truncate max-w-[140px] md:max-w-[200px]">
-                    LCP data @ {lcpDataReady}ms
-                  </span>
-                </div>
-              </div>
-            </Tooltip>
-          )}
-          {lcpRendered > 0 && (
-            <Tooltip content={`LCP streamed at ${lcpRendered}ms — LCP boundary HTML serialized and flushed to the browser${lcpBlocked > 0 ? ` (blocked ${lcpBlocked}ms waiting for thread)` : ""}`}>
-              <div className="relative h-4">
-                <div
-                  className="absolute top-0 flex items-center"
-                  style={{ left: `calc(${(lcpRendered / maxMs) * 100}% + 13px)` }}
-                >
-                  <div className="w-px h-3 bg-green-400" />
-                  <span className="text-[10px] text-green-400 ml-1 font-mono whitespace-nowrap truncate max-w-[140px] md:max-w-[200px]">
-                    LCP streamed @ {lcpRendered}ms
-                    {lcpBlocked > 0 && (
-                      <span className="text-amber-400"> (+{lcpBlocked}ms)</span>
-                    )}
-                  </span>
-                </div>
-              </div>
-            </Tooltip>
-          )}
-          {lcpDisplayed > 0 && (
-            <Tooltip content={`LCP displayed at ${lcpDisplayed}ms — image downloaded, decoded and painted by the browser (+${lcpImageLatencyMs}ms network/render overhead after stream)`}>
-              <div className="relative h-4">
-                <div
-                  className="absolute top-0 flex items-center"
-                  style={{ left: `calc(${(lcpDisplayed / maxMs) * 100}% + 13px)` }}
-                >
-                  <div className="w-px h-3 bg-emerald-300" />
-                  <span className="text-[10px] text-emerald-300 ml-1 font-mono whitespace-nowrap truncate max-w-[140px] md:max-w-[200px]">
-                    LCP displayed @ {lcpDisplayed}ms
-                    <span className="text-zinc-500"> (+{lcpImageLatencyMs}ms)</span>
-                  </span>
-                </div>
-              </div>
-            </Tooltip>
-          )}
-          {timelineScope === "full" && hydrationMs > 0 && (
-            <Tooltip content={`Hydration at ${Math.round(hydrationMs)}ms — React hydrates the server-rendered HTML and attaches event handlers`}>
-              <div className="relative h-4">
-                <div
-                  className="absolute top-0 flex items-center"
-                  style={{ left: `calc(${(hydrationMs / maxMs) * 100}% + 13px)` }}
-                >
-                  <div className="w-px h-3 bg-amber-400" />
-                  <span className="text-[10px] text-amber-400 ml-1 font-mono whitespace-nowrap truncate max-w-[140px] md:max-w-[200px]">
-                    Hydration @ {Math.round(hydrationMs)}ms
-                  </span>
-                </div>
-              </div>
-            </Tooltip>
-          )}
-          {timelineScope === "full" && csrInitComplete > 0 && (
-            <Tooltip content={`Init complete at ${Math.round(csrInitComplete)}ms — all client-side queries resolved, page fully interactive`}>
-              <div className="relative h-4">
-                <div
-                  className="absolute top-0 flex items-center"
-                  style={{ left: `calc(${(csrInitComplete / maxMs) * 100}% + 13px)` }}
-                >
-                  <div className="w-px h-3 bg-purple-400" />
-                  <span className="text-[10px] text-purple-400 ml-1 font-mono whitespace-nowrap truncate max-w-[140px] md:max-w-[200px]">
-                    Init complete @ {Math.round(csrInitComplete)}ms
-                  </span>
-                </div>
-              </div>
-            </Tooltip>
-          )}
-        </div>
-      </div>
-
-      {/* Query timeline (with subgraph op sub-bars) */}
-      <div>
-        <div className="text-xs text-zinc-400 mb-2 font-medium">
-          SSR Queries <span className="text-zinc-600">(concurrent async I/O)</span>
-        </div>
-        <div className="relative bg-zinc-900 rounded border border-zinc-800 p-3">
-          {/* Grid lines */}
-          <div className="absolute inset-3 flex justify-between pointer-events-none">
-            {[0, 25, 50, 75, 100].map((pct) => (
-              <div
-                key={pct}
-                className="w-px bg-zinc-800"
-                style={{ height: "100%" }}
-              />
-            ))}
+        {/* Time axis + marker labels */}
+        <div>
+          <div className="flex justify-between text-xs text-zinc-600 font-mono">
+            <span>0ms</span>
+            <span>{Math.round(maxMs / 4)}ms</span>
+            <span>{Math.round(maxMs / 2)}ms</span>
+            <span>{Math.round((maxMs * 3) / 4)}ms</span>
+            <span>{maxMs}ms</span>
           </div>
-
-          {/* Waterfall marker: shell end */}
-
-          <div className="space-y-1.5 relative z-10">
-            {networkOffsetMs > 0 && (
-              <Tooltip content={`Network offset: ${networkOffsetMs}ms — edge routing, DNS, TCP/TLS, and request overhead before server processing begins`}>
-                <div className="relative h-9 md:h-7">
+          <div className="mt-1 space-y-0 overflow-hidden">
+            {lcpDataReady > 0 && (
+              <Tooltip
+                content={`LCP data ready at ${lcpDataReady}ms — all data for the LCP boundary has been fetched`}
+              >
+                <div className="relative h-4">
                   <div
-                    className="absolute top-0 h-full rounded flex items-center overflow-hidden cursor-default border border-dashed border-zinc-600"
+                    className="absolute top-0 flex items-center"
                     style={{
-                      left: "0%",
-                      width: `${Math.max((networkOffsetMs / maxMs) * 100, 1.5)}%`,
-                      backgroundColor: "rgba(113, 113, 122, 0.3)",
+                      left: `calc(${(lcpDataReady / maxMs) * 100}% + 13px)`,
                     }}
                   >
-                    <span className="text-xs text-zinc-400 px-1.5 truncate font-mono">
-                      Network ({networkOffsetMs}ms)
+                    <div className="w-px h-3 bg-blue-400" />
+                    <span className="text-[10px] text-blue-400 ml-1 font-mono whitespace-nowrap truncate max-w-[140px] md:max-w-[200px]">
+                      LCP data @ {lcpDataReady}ms
                     </span>
                   </div>
                 </div>
               </Tooltip>
             )}
-            {timings
-              .filter((t) => t.name !== "Layout")
-              .map((t) => {
-                const leftPct = (t.wallStart / maxMs) * 100;
-                const widthPct = Math.max(
-                  (t.fetchDuration / maxMs) * 100,
-                  t.cached ? 0.8 : 1.5,
-                );
-                const color = t.subgraphColor ?? BOUNDARY_COLORS[t.name] ?? "rgb(100, 116, 139)";
-
-                const queryLabel = t.queryNames.length > 1
-                  ? `${t.queryNames.length} queries`
-                  : t.queryName;
-                const queryListLines: TooltipLine[] = t.queryNames.length > 1
-                  ? t.queryNames.map((qn, i) => ({ label: `  ${i + 1}.`, value: qn }))
-                  : [];
-                const tooltipLines: TooltipLine[] = t.cached
-                  ? [
-                      { label: t.queryNames.length > 1 ? "Queries" : "Query", value: queryLabel },
-                      ...queryListLines,
-                      { label: "Status", value: "Cached (React cache() dedup)", color: "text-cyan-400" },
-                    ]
-                  : [
-                      { label: t.queryNames.length > 1 ? "Queries" : "Query", value: queryLabel },
-                      ...queryListLines,
-                      { label: "Wall start", value: `${t.wallStart}ms` },
-                      { label: "Fetch", value: `${t.fetchDuration}ms`, color: "text-zinc-100" },
-                      { label: "Render cost", value: `${t.renderCost}ms` },
-                      ...(t.blocked > 0 ? [{ label: "Blocked", value: `${t.blocked}ms`, color: "text-amber-400" }] : []),
-                      { label: "Total", value: `${t.total}ms`, color: "text-zinc-100" },
-                    ];
-
-                return (
-                  <Tooltip
-                    key={t.boundaryPath}
-                    content={<TooltipContent title={t.name} lines={tooltipLines} tag={t.lcpCritical ? "LCP" : undefined} />}
-                  >
-                    <div className="relative h-9 md:h-7">
-                      {/* Query bar (outer) */}
-                      <div
-                        className={`absolute top-0 h-full rounded flex items-center overflow-hidden cursor-default ${
-                          t.cached
-                            ? "opacity-40 border border-dashed border-zinc-600"
-                            : ""
-                        }`}
-                        style={{
-                          left: `${leftPct}%`,
-                          width: `${widthPct}%`,
-                          backgroundColor: t.cached ? "transparent" : color,
-                          opacity: t.lcpCritical ? 1 : 0.7,
-                        }}
-                      >
-                        <span className="text-xs text-white px-1.5 truncate font-mono">
-                          {t.name}{" "}
-                          {t.cached
-                            ? "(cached)"
-                            : t.queryNames.length > 1
-                              ? `(${t.queryNames.length} queries, ${t.fetchDuration}ms)`
-                              : `(${t.fetchDuration}ms)`}
-                        </span>
-                      </div>
-                    </div>
-                  </Tooltip>
-                );
-              })}
-          </div>
-
-          {/* Network offset bar */}
-          {networkOffsetMs > 0 && (
-            <div
-              className="absolute top-0 bottom-0 z-0"
-              style={{
-                left: "12px",
-                width: `${(networkOffsetMs / maxMs) * 100}%`,
-                backgroundColor: "rgba(113, 113, 122, 0.15)",
-              }}
-            />
-          )}
-
-          {/* Vertical marker lines */}
-          {lcpDataReady > 0 && (
-            <div
-              className="absolute top-0 bottom-0 w-px bg-blue-400/50 z-0"
-              style={{ left: `calc(${(lcpDataReady / maxMs) * 100}% + 12px)` }}
-            />
-          )}
-          {lcpRendered > 0 && (
-            <div
-              className="absolute top-0 bottom-0 w-px bg-green-400/40 z-0"
-              style={{ left: `calc(${(lcpRendered / maxMs) * 100}% + 12px)` }}
-            />
-          )}
-          {lcpDisplayed > 0 && (
-            <div
-              className="absolute top-0 bottom-0 w-px bg-emerald-300/40 z-0"
-              style={{ left: `calc(${(lcpDisplayed / maxMs) * 100}% + 12px)` }}
-            />
-          )}
-          {timelineScope === "full" && hydrationMs > 0 && (
-            <div
-              className="absolute top-0 bottom-0 w-px border-l border-dashed border-amber-400/60 z-0"
-              style={{ left: `calc(${(hydrationMs / maxMs) * 100}% + 12px)` }}
-            />
-          )}
-          {timelineScope === "full" && csrInitComplete > 0 && (
-            <div
-              className="absolute top-0 bottom-0 w-px bg-purple-400/40 z-0"
-              style={{ left: `calc(${(csrInitComplete / maxMs) * 100}% + 12px)` }}
-            />
-          )}
-        </div>
-      </div>
-
-      {/* Render timeline */}
-      <div>
-        <div className="text-xs text-zinc-400 mb-2 font-medium">
-          SSR Main Thread{" "}
-          <span className="text-zinc-600">(serialized renders)</span>
-        </div>
-        <div className="relative bg-zinc-900 rounded border border-zinc-800 p-3">
-          {/* Grid lines */}
-          <div className="absolute inset-3 flex justify-between pointer-events-none">
-            {[0, 25, 50, 75, 100].map((pct) => (
-              <div
-                key={pct}
-                className="w-px bg-zinc-800"
-                style={{ height: "100%" }}
-              />
-            ))}
-          </div>
-
-          <div className="relative h-10 md:h-8 z-10">
-            {networkOffsetMs > 0 && (
+            {lcpRendered > 0 && (
               <Tooltip
-                className="absolute top-0 h-full cursor-default"
-                style={{
-                  left: "0%",
-                  width: `${Math.max((networkOffsetMs / maxMs) * 100, 1.5)}%`,
-                }}
-                content={
-                  <TooltipContent
-                    title="Network Offset"
-                    lines={[
-                      { label: "Duration", value: `${networkOffsetMs}ms`, color: "text-zinc-100" },
-                      { label: "Type", value: "Edge/network overhead" },
-                    ]}
-                  />
-                }
+                content={`LCP streamed at ${lcpRendered}ms — LCP boundary HTML serialized and flushed to the browser${lcpBlocked > 0 ? ` (blocked ${lcpBlocked}ms waiting for thread)` : ""}`}
               >
-                <div
-                  className="h-full rounded flex items-center overflow-hidden border border-dashed border-zinc-600"
-                  style={{ backgroundColor: "rgba(113, 113, 122, 0.3)" }}
-                >
-                  <span className="text-xs text-zinc-400 px-1 truncate font-mono">
-                    {networkOffsetMs}ms
-                  </span>
+                <div className="relative h-4">
+                  <div
+                    className="absolute top-0 flex items-center"
+                    style={{
+                      left: `calc(${(lcpRendered / maxMs) * 100}% + 13px)`,
+                    }}
+                  >
+                    <div className="w-px h-3 bg-green-400" />
+                    <span className="text-[10px] text-green-400 ml-1 font-mono whitespace-nowrap truncate max-w-[140px] md:max-w-[200px]">
+                      LCP streamed @ {lcpRendered}ms
+                      {lcpBlocked > 0 && (
+                        <span className="text-amber-400">
+                          {" "}
+                          (+{lcpBlocked}ms)
+                        </span>
+                      )}
+                    </span>
+                  </div>
                 </div>
               </Tooltip>
             )}
-            {renderBlocks.map((block) => {
-              const leftPct = (block.start / maxMs) * 100;
-              const widthPct = Math.max((block.duration / maxMs) * 100, 1.5);
-              const color = block.subgraphColor ?? BOUNDARY_COLORS[block.name] ?? "rgb(100, 116, 139)";
-
-              return (
-                <Tooltip
-                  key={block.name}
-                  className={`absolute top-0 h-full cursor-default ${
-                    block.lcpCritical ? "ring-1 ring-blue-400 rounded" : ""
-                  }`}
-                  style={{
-                    left: `${leftPct}%`,
-                    width: `${widthPct}%`,
-                  }}
-                  content={
-                    <TooltipContent
-                      title={block.name}
-                      lines={[
-                        { label: "Render start", value: `${Math.round(block.start)}ms` },
-                        { label: "Render cost", value: `${block.duration}ms`, color: "text-zinc-100" },
-                        { label: "Type", value: "Sync (blocks thread)" },
-                      ]}
-                      tag={block.lcpCritical ? "LCP" : undefined}
-                    />
-                  }
-                >
+            {lcpDisplayed > 0 && (
+              <Tooltip
+                content={`LCP displayed at ${lcpDisplayed}ms — image downloaded, decoded and painted by the browser (+${lcpImageLatencyMs}ms network/render overhead after stream)`}
+              >
+                <div className="relative h-4">
                   <div
-                    className="h-full rounded flex items-center overflow-hidden"
-                    style={{ backgroundColor: color }}
+                    className="absolute top-0 flex items-center"
+                    style={{
+                      left: `calc(${(lcpDisplayed / maxMs) * 100}% + 13px)`,
+                    }}
                   >
-                    <span className="text-xs text-white px-1 truncate font-mono">
-                      {block.name} ({block.duration}ms)
+                    <div className="w-px h-3 bg-emerald-300" />
+                    <span className="text-[10px] text-emerald-300 ml-1 font-mono whitespace-nowrap truncate max-w-[140px] md:max-w-[200px]">
+                      LCP displayed @ {lcpDisplayed}ms
+                      <span className="text-zinc-500">
+                        {" "}
+                        (+{lcpImageLatencyMs}ms)
+                      </span>
                     </span>
                   </div>
-                </Tooltip>
-              );
-            })}
+                </div>
+              </Tooltip>
+            )}
+            {timelineScope === "full" && hydrationMs > 0 && (
+              <Tooltip
+                content={`Hydration at ${Math.round(hydrationMs)}ms — React hydrates the server-rendered HTML and attaches event handlers`}
+              >
+                <div className="relative h-4">
+                  <div
+                    className="absolute top-0 flex items-center"
+                    style={{
+                      left: `calc(${(hydrationMs / maxMs) * 100}% + 13px)`,
+                    }}
+                  >
+                    <div className="w-px h-3 bg-amber-400" />
+                    <span className="text-[10px] text-amber-400 ml-1 font-mono whitespace-nowrap truncate max-w-[140px] md:max-w-[200px]">
+                      Hydration @ {Math.round(hydrationMs)}ms
+                    </span>
+                  </div>
+                </div>
+              </Tooltip>
+            )}
+            {timelineScope === "full" && csrInitComplete > 0 && (
+              <Tooltip
+                content={`Init complete at ${Math.round(csrInitComplete)}ms — all client-side queries resolved, page fully interactive`}
+              >
+                <div className="relative h-4">
+                  <div
+                    className="absolute top-0 flex items-center"
+                    style={{
+                      left: `calc(${(csrInitComplete / maxMs) * 100}% + 13px)`,
+                    }}
+                  >
+                    <div className="w-px h-3 bg-purple-400" />
+                    <span className="text-[10px] text-purple-400 ml-1 font-mono whitespace-nowrap truncate max-w-[140px] md:max-w-[200px]">
+                      Init complete @ {Math.round(csrInitComplete)}ms
+                    </span>
+                  </div>
+                </div>
+              </Tooltip>
+            )}
           </div>
-
-          {/* Vertical marker lines */}
-          {lcpDataReady > 0 && (
-            <div
-              className="absolute top-3 bottom-3 w-px bg-blue-400/50 z-0"
-              style={{ left: `calc(${(lcpDataReady / maxMs) * 100}% + 12px)` }}
-            />
-          )}
-          {lcpRendered > 0 && (
-            <div
-              className="absolute top-3 bottom-3 w-px bg-green-400/40 z-0"
-              style={{ left: `calc(${(lcpRendered / maxMs) * 100}% + 12px)` }}
-            />
-          )}
-          {lcpDisplayed > 0 && (
-            <div
-              className="absolute top-3 bottom-3 w-px bg-emerald-300/40 z-0"
-              style={{ left: `calc(${(lcpDisplayed / maxMs) * 100}% + 12px)` }}
-            />
-          )}
-          {timelineScope === "full" && hydrationMs > 0 && (
-            <div
-              className="absolute top-3 bottom-3 w-px border-l border-dashed border-amber-400/60 z-0"
-              style={{ left: `calc(${(hydrationMs / maxMs) * 100}% + 12px)` }}
-            />
-          )}
-          {timelineScope === "full" && csrInitComplete > 0 && (
-            <div
-              className="absolute top-3 bottom-3 w-px bg-purple-400/40 z-0"
-              style={{ left: `calc(${(csrInitComplete / maxMs) * 100}% + 12px)` }}
-            />
-          )}
         </div>
-      </div>
 
-      {/* CSR Queries timeline */}
-      {timelineScope === "full" && csrTimings.length > 0 && (
+        {/* Query timeline (with subgraph op sub-bars) */}
         <div>
           <div className="text-xs text-zinc-400 mb-2 font-medium">
-            CSR Queries{" "}
-            <span className="text-zinc-600">(post-hydration)</span>
+            SSR Queries{" "}
+            <span className="text-zinc-600">(concurrent async I/O)</span>
           </div>
           <div className="relative bg-zinc-900 rounded border border-zinc-800 p-3">
             {/* Grid lines */}
@@ -821,56 +614,282 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
               ))}
             </div>
 
+            {/* Waterfall marker: shell end */}
+
             <div className="space-y-1.5 relative z-10">
-              {csrTimings.map((t) => {
-                const leftPct = (t.wallStart / maxMs) * 100;
-                const widthPct = Math.max(
-                  (t.fetchDuration / maxMs) * 100,
-                  1.5,
-                );
+              {networkOffsetMs > 0 && (
+                <Tooltip
+                  content={`Network offset: ${networkOffsetMs}ms — edge routing, DNS, TCP/TLS, and request overhead before server processing begins`}
+                >
+                  <div className="relative h-9 md:h-7">
+                    <div
+                      className="absolute top-0 h-full rounded flex items-center overflow-hidden cursor-default border border-dashed border-zinc-600"
+                      style={{
+                        left: "0%",
+                        width: `${Math.max((networkOffsetMs / maxMs) * 100, 1.5)}%`,
+                        backgroundColor: "rgba(113, 113, 122, 0.3)",
+                      }}
+                    >
+                      <span className="text-xs text-zinc-400 px-1.5 truncate font-mono">
+                        Network ({networkOffsetMs}ms)
+                      </span>
+                    </div>
+                  </div>
+                </Tooltip>
+              )}
+              {timings
+                .filter((t) => t.name !== "Layout")
+                .map((t) => {
+                  const leftPct = (t.wallStart / maxMs) * 100;
+                  const widthPct = Math.max(
+                    (t.fetchDuration / maxMs) * 100,
+                    t.cached ? 0.8 : 1.5,
+                  );
+                  const color =
+                    t.subgraphColor ??
+                    BOUNDARY_COLORS[t.name] ??
+                    "rgb(100, 116, 139)";
+
+                  const queryLabel =
+                    t.queryNames.length > 1
+                      ? `${t.queryNames.length} queries`
+                      : t.queryName;
+                  const queryListLines: TooltipLine[] =
+                    t.queryNames.length > 1
+                      ? t.queryNames.map((qn, i) => ({
+                          label: `  ${i + 1}.`,
+                          value: qn,
+                        }))
+                      : [];
+                  const tooltipLines: TooltipLine[] = t.cached
+                    ? [
+                        {
+                          label: t.queryNames.length > 1 ? "Queries" : "Query",
+                          value: queryLabel,
+                        },
+                        ...queryListLines,
+                        {
+                          label: "Status",
+                          value: "Cached (React cache() dedup)",
+                          color: "text-cyan-400",
+                        },
+                      ]
+                    : [
+                        {
+                          label: t.queryNames.length > 1 ? "Queries" : "Query",
+                          value: queryLabel,
+                        },
+                        ...queryListLines,
+                        { label: "Wall start", value: `${t.wallStart}ms` },
+                        {
+                          label: "Fetch",
+                          value: `${t.fetchDuration}ms`,
+                          color: "text-zinc-100",
+                        },
+                        { label: "Render cost", value: `${t.renderCost}ms` },
+                        ...(t.blocked > 0
+                          ? [
+                              {
+                                label: "Blocked",
+                                value: `${t.blocked}ms`,
+                                color: "text-amber-400",
+                              },
+                            ]
+                          : []),
+                        {
+                          label: "Total",
+                          value: `${t.total}ms`,
+                          color: "text-zinc-100",
+                        },
+                      ];
+
+                  return (
+                    <Tooltip
+                      key={t.boundaryPath}
+                      content={
+                        <TooltipContent
+                          title={t.name}
+                          lines={tooltipLines}
+                          tag={t.lcpCritical ? "LCP" : undefined}
+                        />
+                      }
+                    >
+                      <div className="relative h-9 md:h-7">
+                        {/* Query bar (outer) */}
+                        <div
+                          className={`absolute top-0 h-full rounded flex items-center overflow-hidden cursor-default ${
+                            t.cached
+                              ? "opacity-40 border border-dashed border-zinc-600"
+                              : ""
+                          }`}
+                          style={{
+                            left: `${leftPct}%`,
+                            width: `${widthPct}%`,
+                            backgroundColor: t.cached ? "transparent" : color,
+                            opacity: t.lcpCritical ? 1 : 0.7,
+                          }}
+                        >
+                          <span className="text-xs text-white px-1.5 truncate font-mono">
+                            {t.name}{" "}
+                            {t.cached
+                              ? "(cached)"
+                              : t.queryNames.length > 1
+                                ? `(${t.queryNames.length} queries, ${t.fetchDuration}ms)`
+                                : `(${t.fetchDuration}ms)`}
+                          </span>
+                        </div>
+                      </div>
+                    </Tooltip>
+                  );
+                })}
+            </div>
+
+            {/* Network offset bar */}
+            {networkOffsetMs > 0 && (
+              <div
+                className="absolute top-0 bottom-0 z-0"
+                style={{
+                  left: "12px",
+                  width: `${(networkOffsetMs / maxMs) * 100}%`,
+                  backgroundColor: "rgba(113, 113, 122, 0.15)",
+                }}
+              />
+            )}
+
+            {/* Vertical marker lines */}
+            {lcpDataReady > 0 && (
+              <div
+                className="absolute top-0 bottom-0 w-px bg-blue-400/50 z-0"
+                style={{
+                  left: `calc(${(lcpDataReady / maxMs) * 100}% + 12px)`,
+                }}
+              />
+            )}
+            {lcpRendered > 0 && (
+              <div
+                className="absolute top-0 bottom-0 w-px bg-green-400/40 z-0"
+                style={{ left: `calc(${(lcpRendered / maxMs) * 100}% + 12px)` }}
+              />
+            )}
+            {lcpDisplayed > 0 && (
+              <div
+                className="absolute top-0 bottom-0 w-px bg-emerald-300/40 z-0"
+                style={{
+                  left: `calc(${(lcpDisplayed / maxMs) * 100}% + 12px)`,
+                }}
+              />
+            )}
+            {timelineScope === "full" && hydrationMs > 0 && (
+              <div
+                className="absolute top-0 bottom-0 w-px border-l border-dashed border-amber-400/60 z-0"
+                style={{ left: `calc(${(hydrationMs / maxMs) * 100}% + 12px)` }}
+              />
+            )}
+            {timelineScope === "full" && csrInitComplete > 0 && (
+              <div
+                className="absolute top-0 bottom-0 w-px bg-purple-400/40 z-0"
+                style={{
+                  left: `calc(${(csrInitComplete / maxMs) * 100}% + 12px)`,
+                }}
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Render timeline */}
+        <div>
+          <div className="text-xs text-zinc-400 mb-2 font-medium">
+            SSR Main Thread{" "}
+            <span className="text-zinc-600">(serialized renders)</span>
+          </div>
+          <div className="relative bg-zinc-900 rounded border border-zinc-800 p-3">
+            {/* Grid lines */}
+            <div className="absolute inset-3 flex justify-between pointer-events-none">
+              {[0, 25, 50, 75, 100].map((pct) => (
+                <div
+                  key={pct}
+                  className="w-px bg-zinc-800"
+                  style={{ height: "100%" }}
+                />
+              ))}
+            </div>
+
+            <div className="relative h-10 md:h-8 z-10">
+              {networkOffsetMs > 0 && (
+                <Tooltip
+                  className="absolute top-0 h-full cursor-default"
+                  style={{
+                    left: "0%",
+                    width: `${Math.max((networkOffsetMs / maxMs) * 100, 1.5)}%`,
+                  }}
+                  content={
+                    <TooltipContent
+                      title="Network Offset"
+                      lines={[
+                        {
+                          label: "Duration",
+                          value: `${networkOffsetMs}ms`,
+                          color: "text-zinc-100",
+                        },
+                        { label: "Type", value: "Edge/network overhead" },
+                      ]}
+                    />
+                  }
+                >
+                  <div
+                    className="h-full rounded flex items-center overflow-hidden border border-dashed border-zinc-600"
+                    style={{ backgroundColor: "rgba(113, 113, 122, 0.3)" }}
+                  >
+                    <span className="text-xs text-zinc-400 px-1 truncate font-mono">
+                      {networkOffsetMs}ms
+                    </span>
+                  </div>
+                </Tooltip>
+              )}
+              {renderBlocks.map((block) => {
+                const leftPct = (block.start / maxMs) * 100;
+                const widthPct = Math.max((block.duration / maxMs) * 100, 1.5);
                 const color =
-                  BOUNDARY_COLORS[t.name] ?? "rgb(168, 85, 247)";
+                  block.subgraphColor ??
+                  BOUNDARY_COLORS[block.name] ??
+                  "rgb(100, 116, 139)";
 
                 return (
                   <Tooltip
-                    key={t.boundaryPath}
+                    key={block.name}
+                    className={`absolute top-0 h-full cursor-default ${
+                      block.lcpCritical ? "ring-1 ring-blue-400 rounded" : ""
+                    }`}
+                    style={{
+                      left: `${leftPct}%`,
+                      width: `${widthPct}%`,
+                    }}
                     content={
                       <TooltipContent
-                        title={t.name}
+                        title={block.name}
                         lines={[
-                          { label: t.queryNames.length > 1 ? "Queries" : "Query", value: t.queryNames.length > 1 ? `${t.queryNames.length} queries` : t.queryName },
-                          ...(t.queryNames.length > 1 ? t.queryNames.map((qn, i) => ({ label: `  ${i + 1}.`, value: qn })) : []),
-                          { label: "Starts at", value: `${Math.round(t.wallStart)}ms` },
-                          { label: "Fetch", value: `${t.fetchDuration}ms`, color: "text-zinc-100" as const },
+                          {
+                            label: "Render start",
+                            value: `${Math.round(block.start)}ms`,
+                          },
+                          {
+                            label: "Render cost",
+                            value: `${block.duration}ms`,
+                            color: "text-zinc-100",
+                          },
+                          { label: "Type", value: "Sync (blocks thread)" },
                         ]}
-                        tag="CSR"
+                        tag={block.lcpCritical ? "LCP" : undefined}
                       />
                     }
                   >
-                    <div className="relative h-9 md:h-7">
-                      <div
-                        className="absolute top-0 h-full rounded flex items-center overflow-hidden cursor-default"
-                        style={{
-                          left: `${leftPct}%`,
-                          width: `${widthPct}%`,
-                          background: `repeating-linear-gradient(
-                            135deg,
-                            ${color},
-                            ${color} 3px,
-                            transparent 3px,
-                            transparent 6px
-                          )`,
-                          backgroundColor: color,
-                          opacity: 0.85,
-                        }}
-                      >
-                        <span className="text-xs text-white px-1.5 truncate font-mono drop-shadow-sm">
-                          {t.name}{" "}
-                          {t.queryNames.length > 1
-                            ? `(${t.queryNames.length} queries, ${t.fetchDuration}ms)`
-                            : `(${t.fetchDuration}ms)`}
-                        </span>
-                      </div>
+                    <div
+                      className="h-full rounded flex items-center overflow-hidden"
+                      style={{ backgroundColor: color }}
+                    >
+                      <span className="text-xs text-white px-1 truncate font-mono">
+                        {block.name} ({block.duration}ms)
+                      </span>
                     </div>
                   </Tooltip>
                 );
@@ -881,7 +900,9 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
             {lcpDataReady > 0 && (
               <div
                 className="absolute top-3 bottom-3 w-px bg-blue-400/50 z-0"
-                style={{ left: `calc(${(lcpDataReady / maxMs) * 100}% + 12px)` }}
+                style={{
+                  left: `calc(${(lcpDataReady / maxMs) * 100}% + 12px)`,
+                }}
               />
             )}
             {lcpRendered > 0 && (
@@ -893,50 +914,36 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
             {lcpDisplayed > 0 && (
               <div
                 className="absolute top-3 bottom-3 w-px bg-emerald-300/40 z-0"
-                style={{ left: `calc(${(lcpDisplayed / maxMs) * 100}% + 12px)` }}
-              />
-            )}
-            {hydrationMs > 0 && (
-              <div
-                className="absolute top-3 bottom-3 w-px border-l border-dashed border-amber-400/60 z-0"
                 style={{
-                  left: `calc(${(hydrationMs / maxMs) * 100}% + 12px)`,
+                  left: `calc(${(lcpDisplayed / maxMs) * 100}% + 12px)`,
                 }}
               />
             )}
-            {csrInitComplete > 0 && (
+            {timelineScope === "full" && hydrationMs > 0 && (
               <div
-                className="absolute top-3 bottom-3 w-px bg-purple-400/40 z-0"
-                style={{ left: `calc(${(csrInitComplete / maxMs) * 100}% + 12px)` }}
+                className="absolute top-3 bottom-3 w-px border-l border-dashed border-amber-400/60 z-0"
+                style={{ left: `calc(${(hydrationMs / maxMs) * 100}% + 12px)` }}
               />
             )}
-
+            {timelineScope === "full" && csrInitComplete > 0 && (
+              <div
+                className="absolute top-3 bottom-3 w-px bg-purple-400/40 z-0"
+                style={{
+                  left: `calc(${(csrInitComplete / maxMs) * 100}% + 12px)`,
+                }}
+              />
+            )}
           </div>
         </div>
-      )}
 
-      {/* Long Animation Frames */}
-      {timelineScope === "full" && (() => {
-        // Only include LoAFs that started before the last CSR query begins, then merge adjacent ones
-        const eligible = filterLoafsByCsrCutoff(aggregatedLoaf, lastCsrQueryStart);
-        const mergedLoaf = mergeLoafEntries(eligible);
-
-        const totalBlockingTime = eligible.reduce((sum, e) => sum + e.blockingDuration, 0);
-
-        return (
+        {/* CSR Queries timeline */}
+        {timelineScope === "full" && csrTimings.length > 0 && (
           <div>
-            <div className="text-xs text-zinc-400 mb-2 font-medium flex items-center gap-2">
-              <span>
-                CSR Main Thread{" "}
-                <span className="text-zinc-600">(long animation frames &gt;50ms)</span>
-              </span>
-              {totalBlockingTime > 0 && (
-                <span className="text-red-400 font-mono">
-                  {Math.round(totalBlockingTime)}ms total blocking
-                </span>
-              )}
+            <div className="text-xs text-zinc-400 mb-2 font-medium">
+              CSR Queries{" "}
+              <span className="text-zinc-600">(post-hydration)</span>
             </div>
-            <div className="relative bg-zinc-900 rounded border border-zinc-800 p-3 overflow-hidden">
+            <div className="relative bg-zinc-900 rounded border border-zinc-800 p-3">
               {/* Grid lines */}
               <div className="absolute inset-3 flex justify-between pointer-events-none">
                 {[0, 25, 50, 75, 100].map((pct) => (
@@ -948,115 +955,103 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
                 ))}
               </div>
 
-              {mergedLoaf.length > 0 ? (
-                <div className="relative h-10 md:h-8 z-10">
-                  {mergedLoaf.map((group, i) => {
-                    const leftPct = (group.startTime / maxMs) * 100;
-                    const spanWidth = group.endTime - group.startTime;
-                    const totalWidthPct = Math.max(
-                      (spanWidth / maxMs) * 100,
-                      1.5,
-                    );
-                    const blockingWidthPct = Math.max(
-                      (group.totalBlocking / maxMs) * 100,
-                      1,
-                    );
+              <div className="space-y-1.5 relative z-10">
+                {csrTimings.map((t) => {
+                  const leftPct = (t.wallStart / maxMs) * 100;
+                  const widthPct = Math.max(
+                    (t.fetchDuration / maxMs) * 100,
+                    1.5,
+                  );
+                  const color = BOUNDARY_COLORS[t.name] ?? "rgb(168, 85, 247)";
 
-                    const allScripts = group.entries.flatMap((e) => e.scripts);
-                    const scriptSummary =
-                      allScripts.length > 0
-                        ? allScripts
-                            .map((s) => {
-                              const file = s.sourceURL.split("/").pop() ?? s.sourceURL;
-                              return s.sourceFunctionName
-                                ? `${s.sourceFunctionName} (${file})`
-                                : file;
-                            })
-                            .join(", ")
-                        : "";
-
-                    const loafLines: TooltipLine[] = [
-                      { label: "Start", value: `${Math.round(group.startTime)}ms` },
-                      { label: "Span", value: `${Math.round(spanWidth)}ms` },
-                      ...(group.entries.length > 1
-                        ? [{ label: "Frames", value: `${group.entries.length} LoAFs merged` }]
-                        : []),
-                      { label: "Total duration", value: `${Math.round(group.totalDuration)}ms` },
-                      { label: "Blocking", value: `${Math.round(group.totalBlocking)}ms`, color: "text-red-400" },
-                      ...allScripts.map((s) => {
-                        const file = s.sourceURL.split("/").pop() ?? s.sourceURL;
-                        const fn = s.sourceFunctionName || "(anonymous)";
-                        return { label: fn, value: `${file} (${s.duration}ms)`, color: "text-zinc-400" as string };
-                      }),
-                    ];
-
-                    return (
-                      <Tooltip
-                        key={i}
-                        className="absolute top-0 h-full cursor-default"
-                        style={{
-                          left: `${leftPct}%`,
-                          width: `${totalWidthPct}%`,
-                        }}
-                        content={<TooltipContent title={group.entries.length > 1 ? `${group.entries.length} Long Animation Frames` : "Long Animation Frame"} lines={loafLines} tag="LoAF" />}
-                      >
-                        {/* Total duration (dimmer) */}
-                        <div
-                          className="absolute top-0 left-0 h-full rounded cursor-default"
-                          style={{
-                            width: "100%",
-                            backgroundColor: "rgb(239, 68, 68)",
-                            opacity: 0.3,
-                          }}
+                  return (
+                    <Tooltip
+                      key={t.boundaryPath}
+                      content={
+                        <TooltipContent
+                          title={t.name}
+                          lines={[
+                            {
+                              label:
+                                t.queryNames.length > 1 ? "Queries" : "Query",
+                              value:
+                                t.queryNames.length > 1
+                                  ? `${t.queryNames.length} queries`
+                                  : t.queryName,
+                            },
+                            ...(t.queryNames.length > 1
+                              ? t.queryNames.map((qn, i) => ({
+                                  label: `  ${i + 1}.`,
+                                  value: qn,
+                                }))
+                              : []),
+                            {
+                              label: "Starts at",
+                              value: `${Math.round(t.wallStart)}ms`,
+                            },
+                            {
+                              label: "Fetch",
+                              value: `${t.fetchDuration}ms`,
+                              color: "text-zinc-100" as const,
+                            },
+                          ]}
+                          tag="CSR"
                         />
-                        {/* Blocking duration (bright) */}
+                      }
+                    >
+                      <div className="relative h-9 md:h-7">
                         <div
-                          className="absolute top-0 left-0 h-full rounded flex items-center overflow-hidden cursor-default"
+                          className="absolute top-0 h-full rounded flex items-center overflow-hidden cursor-default"
                           style={{
-                            width: `${Math.min((group.totalBlocking / spanWidth) * 100, 100)}%`,
-                            minWidth: "20px",
-                            backgroundColor: "rgb(239, 68, 68)",
-                            opacity: 0.8,
+                            left: `${leftPct}%`,
+                            width: `${widthPct}%`,
+                            background: `repeating-linear-gradient(
+                            135deg,
+                            ${color},
+                            ${color} 3px,
+                            transparent 3px,
+                            transparent 6px
+                          )`,
+                            backgroundColor: color,
+                            opacity: 0.85,
                           }}
                         >
-                          <span className="text-xs text-white px-1.5 truncate font-mono">
-                            {Math.round(group.totalBlocking)}ms blocking
-                            {scriptSummary && (
-                              <span className="text-red-200 ml-1">
-                                {scriptSummary}
-                              </span>
-                            )}
+                          <span className="text-xs text-white px-1.5 truncate font-mono drop-shadow-sm">
+                            {t.name}{" "}
+                            {t.queryNames.length > 1
+                              ? `(${t.queryNames.length} queries, ${t.fetchDuration}ms)`
+                              : `(${t.fetchDuration}ms)`}
                           </span>
                         </div>
-                      </Tooltip>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="relative h-7 flex items-center">
-                  <span className="text-xs text-zinc-600 font-mono">
-                    No long animation frames detected during initialization
-                  </span>
-                </div>
-              )}
+                      </div>
+                    </Tooltip>
+                  );
+                })}
+              </div>
 
               {/* Vertical marker lines */}
               {lcpDataReady > 0 && (
                 <div
                   className="absolute top-3 bottom-3 w-px bg-blue-400/50 z-0"
-                  style={{ left: `calc(${(lcpDataReady / maxMs) * 100}% + 12px)` }}
+                  style={{
+                    left: `calc(${(lcpDataReady / maxMs) * 100}% + 12px)`,
+                  }}
                 />
               )}
               {lcpRendered > 0 && (
                 <div
                   className="absolute top-3 bottom-3 w-px bg-green-400/40 z-0"
-                  style={{ left: `calc(${(lcpRendered / maxMs) * 100}% + 12px)` }}
+                  style={{
+                    left: `calc(${(lcpRendered / maxMs) * 100}% + 12px)`,
+                  }}
                 />
               )}
               {lcpDisplayed > 0 && (
                 <div
                   className="absolute top-3 bottom-3 w-px bg-emerald-300/40 z-0"
-                  style={{ left: `calc(${(lcpDisplayed / maxMs) * 100}% + 12px)` }}
+                  style={{
+                    left: `calc(${(lcpDisplayed / maxMs) * 100}% + 12px)`,
+                  }}
                 />
               )}
               {hydrationMs > 0 && (
@@ -1070,119 +1065,350 @@ export function CriticalInitPath({ boundaries, queries, pctl, hydrationTimes, lo
               {csrInitComplete > 0 && (
                 <div
                   className="absolute top-3 bottom-3 w-px bg-purple-400/40 z-0"
-                  style={{ left: `calc(${(csrInitComplete / maxMs) * 100}% + 12px)` }}
+                  style={{
+                    left: `calc(${(csrInitComplete / maxMs) * 100}% + 12px)`,
+                  }}
                 />
               )}
             </div>
           </div>
-        );
-      })()}
+        )}
 
-      {/* Summary */}
-      <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs font-mono">
-        <div>
-          <span className="text-zinc-500">Layout (waterfall): </span>
-          <span className="text-amber-400">
-            {timings.find((t) => t.name === "Layout")?.total ?? 0}ms
-          </span>
-        </div>
-        <div>
-          <span className="text-zinc-500">Nav render cost: </span>
-          <span className="text-orange-400">
-            {timings.find((t) => t.name === "Nav")?.renderCost ?? 0}ms
-          </span>
-        </div>
-        <div>
-          <span className="text-zinc-500">LCP query: </span>
-          <span className="text-zinc-300">
-            {timings.find((t) => t.lcpCritical)?.fetchDuration ?? 0}ms
-          </span>
-        </div>
-        {lcpBlocked > 0 && (
+        {/* Long Animation Frames */}
+        {timelineScope === "full" &&
+          (() => {
+            // Only include LoAFs that started before the last CSR query begins, then merge adjacent ones
+            const eligible = filterLoafsByCsrCutoff(
+              aggregatedLoaf,
+              lastCsrQueryStart,
+            );
+            const mergedLoaf = mergeLoafEntries(eligible);
+
+            const totalBlockingTime = eligible.reduce(
+              (sum, e) => sum + e.blockingDuration,
+              0,
+            );
+
+            return (
+              <div>
+                <div className="text-xs text-zinc-400 mb-2 font-medium flex items-center gap-2">
+                  <span>
+                    CSR Main Thread{" "}
+                    <span className="text-zinc-600">
+                      (long animation frames &gt;50ms)
+                    </span>
+                  </span>
+                  {totalBlockingTime > 0 && (
+                    <span className="text-red-400 font-mono">
+                      {Math.round(totalBlockingTime)}ms total blocking
+                    </span>
+                  )}
+                </div>
+                <div className="relative bg-zinc-900 rounded border border-zinc-800 p-3 overflow-hidden">
+                  {/* Grid lines */}
+                  <div className="absolute inset-3 flex justify-between pointer-events-none">
+                    {[0, 25, 50, 75, 100].map((pct) => (
+                      <div
+                        key={pct}
+                        className="w-px bg-zinc-800"
+                        style={{ height: "100%" }}
+                      />
+                    ))}
+                  </div>
+
+                  {mergedLoaf.length > 0 ? (
+                    <div className="relative h-10 md:h-8 z-10">
+                      {mergedLoaf.map((group, i) => {
+                        const leftPct = (group.startTime / maxMs) * 100;
+                        const spanWidth = group.endTime - group.startTime;
+                        const totalWidthPct = Math.max(
+                          (spanWidth / maxMs) * 100,
+                          1.5,
+                        );
+                        const blockingWidthPct = Math.max(
+                          (group.totalBlocking / maxMs) * 100,
+                          1,
+                        );
+
+                        const allScripts = group.entries.flatMap(
+                          (e) => e.scripts,
+                        );
+                        const scriptSummary =
+                          allScripts.length > 0
+                            ? allScripts
+                                .map((s) => {
+                                  const file =
+                                    s.sourceURL.split("/").pop() ?? s.sourceURL;
+                                  return s.sourceFunctionName
+                                    ? `${s.sourceFunctionName} (${file})`
+                                    : file;
+                                })
+                                .join(", ")
+                            : "";
+
+                        const loafLines: TooltipLine[] = [
+                          {
+                            label: "Start",
+                            value: `${Math.round(group.startTime)}ms`,
+                          },
+                          {
+                            label: "Span",
+                            value: `${Math.round(spanWidth)}ms`,
+                          },
+                          ...(group.entries.length > 1
+                            ? [
+                                {
+                                  label: "Frames",
+                                  value: `${group.entries.length} LoAFs merged`,
+                                },
+                              ]
+                            : []),
+                          {
+                            label: "Total duration",
+                            value: `${Math.round(group.totalDuration)}ms`,
+                          },
+                          {
+                            label: "Blocking",
+                            value: `${Math.round(group.totalBlocking)}ms`,
+                            color: "text-red-400",
+                          },
+                          ...allScripts.map((s) => {
+                            const file =
+                              s.sourceURL.split("/").pop() ?? s.sourceURL;
+                            const fn = s.sourceFunctionName || "(anonymous)";
+                            return {
+                              label: fn,
+                              value: `${file} (${s.duration}ms)`,
+                              color: "text-zinc-400" as string,
+                            };
+                          }),
+                        ];
+
+                        return (
+                          <Tooltip
+                            key={i}
+                            className="absolute top-0 h-full cursor-default"
+                            style={{
+                              left: `${leftPct}%`,
+                              width: `${totalWidthPct}%`,
+                            }}
+                            content={
+                              <TooltipContent
+                                title={
+                                  group.entries.length > 1
+                                    ? `${group.entries.length} Long Animation Frames`
+                                    : "Long Animation Frame"
+                                }
+                                lines={loafLines}
+                                tag="LoAF"
+                              />
+                            }
+                          >
+                            {/* Total duration (dimmer) */}
+                            <div
+                              className="absolute top-0 left-0 h-full rounded cursor-default"
+                              style={{
+                                width: "100%",
+                                backgroundColor: "rgb(239, 68, 68)",
+                                opacity: 0.3,
+                              }}
+                            />
+                            {/* Blocking duration (bright) */}
+                            <div
+                              className="absolute top-0 left-0 h-full rounded flex items-center overflow-hidden cursor-default"
+                              style={{
+                                width: `${Math.min((group.totalBlocking / spanWidth) * 100, 100)}%`,
+                                minWidth: "20px",
+                                backgroundColor: "rgb(239, 68, 68)",
+                                opacity: 0.8,
+                              }}
+                            >
+                              <span className="text-xs text-white px-1.5 truncate font-mono">
+                                {Math.round(group.totalBlocking)}ms blocking
+                                {scriptSummary && (
+                                  <span className="text-red-200 ml-1">
+                                    {scriptSummary}
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                          </Tooltip>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="relative h-7 flex items-center">
+                      <span className="text-xs text-zinc-600 font-mono">
+                        No long animation frames detected during initialization
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Vertical marker lines */}
+                  {lcpDataReady > 0 && (
+                    <div
+                      className="absolute top-3 bottom-3 w-px bg-blue-400/50 z-0"
+                      style={{
+                        left: `calc(${(lcpDataReady / maxMs) * 100}% + 12px)`,
+                      }}
+                    />
+                  )}
+                  {lcpRendered > 0 && (
+                    <div
+                      className="absolute top-3 bottom-3 w-px bg-green-400/40 z-0"
+                      style={{
+                        left: `calc(${(lcpRendered / maxMs) * 100}% + 12px)`,
+                      }}
+                    />
+                  )}
+                  {lcpDisplayed > 0 && (
+                    <div
+                      className="absolute top-3 bottom-3 w-px bg-emerald-300/40 z-0"
+                      style={{
+                        left: `calc(${(lcpDisplayed / maxMs) * 100}% + 12px)`,
+                      }}
+                    />
+                  )}
+                  {hydrationMs > 0 && (
+                    <div
+                      className="absolute top-3 bottom-3 w-px border-l border-dashed border-amber-400/60 z-0"
+                      style={{
+                        left: `calc(${(hydrationMs / maxMs) * 100}% + 12px)`,
+                      }}
+                    />
+                  )}
+                  {csrInitComplete > 0 && (
+                    <div
+                      className="absolute top-3 bottom-3 w-px bg-purple-400/40 z-0"
+                      style={{
+                        left: `calc(${(csrInitComplete / maxMs) * 100}% + 12px)`,
+                      }}
+                    />
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
+        {/* Summary */}
+        <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs font-mono">
           <div>
-            <span className="text-zinc-500">LCP blocked: </span>
-            <span className="text-amber-400 font-medium">{lcpBlocked}ms</span>
-          </div>
-        )}
-        <div>
-          <span className="text-zinc-500">LCP streamed: </span>
-          <span className="text-green-400 font-medium">{lcpRendered}ms</span>
-        </div>
-        {lcpDisplayed > 0 && (
-          <div>
-            <span className="text-zinc-500">LCP displayed: </span>
-            <span className="text-emerald-300 font-medium">{lcpDisplayed}ms</span>
-          </div>
-        )}
-        {networkOffsetMs > 0 && (
-          <div>
-            <span className="text-zinc-500">Network offset: </span>
-            <span className="text-zinc-400">{networkOffsetMs}ms</span>
-          </div>
-        )}
-        {hydrationMs > 0 && (
-          <div>
-            <span className="text-zinc-500">Hydration: </span>
-            <span className="text-amber-400">{Math.round(hydrationMs)}ms</span>
-          </div>
-        )}
-        {initializationMs > 0 && (
-          <div>
-            <span className="text-zinc-500">Effects complete: </span>
-            <span className="text-orange-400">{Math.round(initializationMs)}ms</span>
-          </div>
-        )}
-        {navTiming && (
-          <div>
-            <span className="text-zinc-500">DOM Interactive: </span>
-            <span className="text-cyan-400">{Math.round(navTiming.domInteractive)}ms</span>
-          </div>
-        )}
-        {navTiming && (
-          <div>
-            <span className="text-zinc-500">DCL: </span>
-            <span className="text-cyan-400">{Math.round(navTiming.domContentLoaded)}ms</span>
-          </div>
-        )}
-        {navTiming && navTiming.loadEvent > 0 && (
-          <div>
-            <span className="text-zinc-500">Load: </span>
-            <span className="text-cyan-400">{Math.round(navTiming.loadEvent)}ms</span>
-          </div>
-        )}
-        {navTiming && (
-          <div>
-            <span className="text-zinc-500">TBT: </span>
-            <span className={`font-medium ${navTiming.tbt > 200 ? "text-red-400" : navTiming.tbt > 50 ? "text-amber-400" : "text-green-400"}`}>
-              {Math.round(navTiming.tbt)}ms
+            <span className="text-zinc-500">Layout (waterfall): </span>
+            <span className="text-amber-400">
+              {timings.find((t) => t.name === "Layout")?.total ?? 0}ms
             </span>
           </div>
-        )}
-        <div>
-          <span className="text-zinc-500">Long frames: </span>
-          <span className="text-red-400">
-            {aggregatedLoaf.length > 0
-              ? `${aggregatedLoaf.length} (${Math.round(aggregatedLoaf.reduce((sum, e) => sum + e.blockingDuration, 0))}ms blocking)`
-              : "0"}
-          </span>
+          <div>
+            <span className="text-zinc-500">Nav render cost: </span>
+            <span className="text-orange-400">
+              {timings.find((t) => t.name === "Nav")?.renderCost ?? 0}ms
+            </span>
+          </div>
+          <div>
+            <span className="text-zinc-500">LCP query: </span>
+            <span className="text-zinc-300">
+              {timings.find((t) => t.lcpCritical)?.fetchDuration ?? 0}ms
+            </span>
+          </div>
+          {lcpBlocked > 0 && (
+            <div>
+              <span className="text-zinc-500">LCP blocked: </span>
+              <span className="text-amber-400 font-medium">{lcpBlocked}ms</span>
+            </div>
+          )}
+          <div>
+            <span className="text-zinc-500">LCP streamed: </span>
+            <span className="text-green-400 font-medium">{lcpRendered}ms</span>
+          </div>
+          {lcpDisplayed > 0 && (
+            <div>
+              <span className="text-zinc-500">LCP displayed: </span>
+              <span className="text-emerald-300 font-medium">
+                {lcpDisplayed}ms
+              </span>
+            </div>
+          )}
+          {networkOffsetMs > 0 && (
+            <div>
+              <span className="text-zinc-500">Network offset: </span>
+              <span className="text-zinc-400">{networkOffsetMs}ms</span>
+            </div>
+          )}
+          {hydrationMs > 0 && (
+            <div>
+              <span className="text-zinc-500">Hydration: </span>
+              <span className="text-amber-400">
+                {Math.round(hydrationMs)}ms
+              </span>
+            </div>
+          )}
+          {initializationMs > 0 && (
+            <div>
+              <span className="text-zinc-500">Effects complete: </span>
+              <span className="text-orange-400">
+                {Math.round(initializationMs)}ms
+              </span>
+            </div>
+          )}
+          {navTiming && (
+            <div>
+              <span className="text-zinc-500">DOM Interactive: </span>
+              <span className="text-cyan-400">
+                {Math.round(navTiming.domInteractive)}ms
+              </span>
+            </div>
+          )}
+          {navTiming && (
+            <div>
+              <span className="text-zinc-500">DCL: </span>
+              <span className="text-cyan-400">
+                {Math.round(navTiming.domContentLoaded)}ms
+              </span>
+            </div>
+          )}
+          {navTiming && navTiming.loadEvent > 0 && (
+            <div>
+              <span className="text-zinc-500">Load: </span>
+              <span className="text-cyan-400">
+                {Math.round(navTiming.loadEvent)}ms
+              </span>
+            </div>
+          )}
+          {navTiming && (
+            <div>
+              <span className="text-zinc-500">TBT: </span>
+              <span
+                className={`font-medium ${navTiming.tbt > 200 ? "text-red-400" : navTiming.tbt > 50 ? "text-amber-400" : "text-green-400"}`}
+              >
+                {Math.round(navTiming.tbt)}ms
+              </span>
+            </div>
+          )}
+          <div>
+            <span className="text-zinc-500">Long frames: </span>
+            <span className="text-red-400">
+              {aggregatedLoaf.length > 0
+                ? `${aggregatedLoaf.length} (${Math.round(aggregatedLoaf.reduce((sum, e) => sum + e.blockingDuration, 0))}ms blocking)`
+                : "0"}
+            </span>
+          </div>
+          {csrInitComplete > 0 && (
+            <div>
+              <span className="text-zinc-500">CSR init complete: </span>
+              <span className="text-purple-400 font-medium">
+                {Math.round(csrInitComplete)}ms
+              </span>
+            </div>
+          )}
+          {csrInitComplete > 0 && (
+            <div>
+              <span className="text-zinc-500">Total E2E: </span>
+              <span className="text-white font-medium">
+                {Math.round(csrInitComplete)}ms
+              </span>
+            </div>
+          )}
         </div>
-        {csrInitComplete > 0 && (
-          <div>
-            <span className="text-zinc-500">CSR init complete: </span>
-            <span className="text-purple-400 font-medium">
-              {Math.round(csrInitComplete)}ms
-            </span>
-          </div>
-        )}
-        {csrInitComplete > 0 && (
-          <div>
-            <span className="text-zinc-500">Total E2E: </span>
-            <span className="text-white font-medium">
-              {Math.round(csrInitComplete)}ms
-            </span>
-          </div>
-        )}
-      </div>
       </div>
     </div>
   );
