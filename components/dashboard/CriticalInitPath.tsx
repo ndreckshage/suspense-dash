@@ -37,6 +37,7 @@ interface BoundaryTiming {
   queryNames: string[];
   cached: boolean;
   subgraphColor?: string;
+  prefetchQueries?: string[];
 }
 
 const BOUNDARY_COLORS: Record<string, string> = {
