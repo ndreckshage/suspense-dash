@@ -79,6 +79,7 @@ export function SubgraphCallsTab({ queries, subgraphOps, pctl, mock }: Props) {
     });
   }, []);
 
+
   // Dynamic color map based on subgraphs present in the data
   const subgraphColorMap = useMemo(() => {
     const names = new Set<string>();
@@ -258,6 +259,14 @@ export function SubgraphCallsTab({ queries, subgraphOps, pctl, mock }: Props) {
     return { exceeded, noSlo, hasSlo };
   }, [subgraphRows]);
 
+  const expandAll = useCallback(() => {
+    setExpanded(new Set(filteredRows.map((r) => r.name)));
+  }, [filteredRows]);
+
+  const collapseAll = useCallback(() => {
+    setExpanded(new Set());
+  }, []);
+
   const maxCallsPerReq = Math.max(...filteredRows.map((r) => r.callsPerReq), 1);
 
   return (
@@ -341,10 +350,26 @@ export function SubgraphCallsTab({ queries, subgraphOps, pctl, mock }: Props) {
         )}
         {summary.dedupedPerReq > 0 && (
           <div>
-            <span className="text-zinc-500">Saved by memoization: </span>
+            <span className="text-zinc-500">Memoized: </span>
             <span className="text-cyan-500 font-medium">{summary.dedupedPerReq}</span>
           </div>
         )}
+      </div>
+
+      {/* Expand / Collapse controls */}
+      <div className="flex gap-2">
+        <button
+          onClick={expandAll}
+          className="text-xs text-zinc-500 hover:text-zinc-300 px-2 py-1 rounded bg-zinc-800/50 hover:bg-zinc-800"
+        >
+          Expand All
+        </button>
+        <button
+          onClick={collapseAll}
+          className="text-xs text-zinc-500 hover:text-zinc-300 px-2 py-1 rounded bg-zinc-800/50 hover:bg-zinc-800"
+        >
+          Collapse All
+        </button>
       </div>
 
       {/* Per-subgraph table */}
