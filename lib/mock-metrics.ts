@@ -23,6 +23,8 @@ export interface WaterfallTiming {
   cached: boolean;
   /** Color of the heaviest subgraph in this boundary's queries */
   subgraphColor?: string;
+  /** Query names that were prefetched (await: false) by this boundary */
+  prefetchQueries?: string[];
 }
 
 export interface WaterfallCsrTiming {
@@ -70,6 +72,8 @@ export interface MockTreeNode {
   slo: number;
   lcpCritical: boolean;
   cached: boolean;
+  /** Query was prefetched (await: false) — fires but doesn't suspend */
+  noAwait?: boolean;
   subgraphName?: string;
   subgraphColor?: string;
   hasChildren: boolean;

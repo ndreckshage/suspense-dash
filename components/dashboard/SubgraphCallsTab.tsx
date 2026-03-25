@@ -341,7 +341,7 @@ export function SubgraphCallsTab({ queries, subgraphOps, pctl, mock }: Props) {
         )}
         {summary.dedupedPerReq > 0 && (
           <div>
-            <span className="text-zinc-500">Saved by React dedup: </span>
+            <span className="text-zinc-500">Saved by memoization: </span>
             <span className="text-cyan-500 font-medium">{summary.dedupedPerReq}</span>
           </div>
         )}

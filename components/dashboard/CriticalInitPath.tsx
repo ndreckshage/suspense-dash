@@ -661,6 +661,15 @@ export function CriticalInitPath({
                           value: qn,
                         }))
                       : [];
+                  const prefetchLines: TooltipLine[] = t.prefetchQueries?.length
+                    ? [
+                        {
+                          label: "Prefetch",
+                          value: t.prefetchQueries.join(", "),
+                          color: "text-orange-400",
+                        },
+                      ]
+                    : [];
                   const tooltipLines: TooltipLine[] = t.cached
                     ? [
                         {
@@ -670,9 +679,10 @@ export function CriticalInitPath({
                         ...queryListLines,
                         {
                           label: "Status",
-                          value: "Cached (React cache() dedup)",
+                          value: "Memoized (React cache() dedup)",
                           color: "text-cyan-400",
                         },
+                        ...prefetchLines,
                       ]
                     : [
                         {
@@ -701,6 +711,7 @@ export function CriticalInitPath({
                           value: `${t.total}ms`,
                           color: "text-zinc-100",
                         },
+                        ...prefetchLines,
                       ];
 
                   return (
@@ -732,7 +743,7 @@ export function CriticalInitPath({
                           <span className="text-xs text-white px-1.5 truncate font-mono">
                             {t.name}{" "}
                             {t.cached
-                              ? "(cached)"
+                              ? "(memoized)"
                               : t.queryNames.length > 1
                                 ? `(${t.queryNames.length} queries, ${t.fetchDuration}ms)`
                                 : `(${t.fetchDuration}ms)`}

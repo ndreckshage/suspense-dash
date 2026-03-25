@@ -409,7 +409,7 @@ describe("parseYamlDashboard", () => {
       // Prefetch is 100ms, child starts at same wallStart (parent didn't await).
       // Remaining = full 100ms.
       expect(detailQuery.fetchPctl).toBe(100);
-      expect(detailQuery.cached).toBe(false); // not fully resolved yet
+      expect(detailQuery.cached).toBe(true); // memoized, but still shows remaining time
     });
 
     it("tree: cached query shows 0 when prefetch already completed", () => {

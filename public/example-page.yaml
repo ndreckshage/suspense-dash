@@ -73,6 +73,10 @@ boundaries:
       getExperimentContext:
         ops:
           experimentation-subgraph: { p50: 28, p90: 35, p99: 50 }
+      getProductInfo:
+        await: false
+        ops:
+          product-subgraph: { p50: 30, p90: 45, p99: 65 }
 
     Nav:
       render_cost: 3
@@ -132,7 +136,9 @@ boundaries:
         queries:
           getProductInfo:
             ops:
-              product-subgraph: { p50: 30, p90: 45, p99: 65 }
+              product-subgraph:
+                duration: { p50: 30, p90: 45, p99: 65 }
+                cached: true
 
       Main.Pricing:
         render_cost: 8
