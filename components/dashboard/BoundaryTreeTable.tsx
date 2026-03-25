@@ -343,6 +343,8 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
         const metrics = queryByKey.get(key) ?? [];
         const durations = metrics.map((m) => m.duration_ms);
         const isCached = metrics.length > 0 && metrics.every((m) => m.fullyCached);
+        // Show actual duration even for memoized queries (UI fades them)
+        const queryDurationPctl = percentile(durations, pctl);
 
         nodes.push({
           name: item.queryName!,
@@ -351,10 +353,10 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
           type: "query",
           boundaryPath: item.boundaryPath,
           wallStartPctl: 0,
-          fetchPctl: isCached ? 0 : percentile(durations, pctl),
+          fetchPctl: queryDurationPctl,
           renderCostPctl: 0,
           blockedPctl: 0,
-          totalPctl: isCached ? 0 : percentile(durations, pctl),
+          totalPctl: queryDurationPctl,
           slo: 0,
           lcpCritical: false,
           cached: isCached,
@@ -380,6 +382,8 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
           ? SUBGRAPHS[sgName as SubgraphName]?.color
           : undefined;
 
+        // Show actual duration even for memoized ops (UI fades them)
+        const durationPctl = percentile(durations, pctl);
         nodes.push({
           name: sgName || item.opName!,
           path: item.path,
@@ -387,10 +391,10 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
           type: "subgraph-op",
           boundaryPath: item.boundaryPath,
           wallStartPctl: 0,
-          fetchPctl: isCached ? 0 : percentile(durations, pctl),
+          fetchPctl: durationPctl,
           renderCostPctl: 0,
           blockedPctl: 0,
-          totalPctl: isCached ? 0 : percentile(durations, pctl),
+          totalPctl: durationPctl,
           slo: sgSlo,
           lcpCritical: false,
           cached: isCached,

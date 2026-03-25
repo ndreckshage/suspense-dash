@@ -663,6 +663,35 @@ describe("parseYamlDashboard", () => {
       expect(layoutBoundary.fetchPctl).toBe(40);
     });
 
+    it("tree: memoized subgraph-op shows actual duration (not 0)", () => {
+      const data = parseYamlDashboard(CACHED_OPS_YAML);
+      const t = data.tree[50];
+      const bulletOp = t.nodes.find(
+        (n) => n.type === "subgraph-op" && n.boundaryPath === "Layout.Bullets",
+      )!;
+      expect(bulletOp.cached).toBe(true);
+      // Should show actual op duration (30ms), not 0 — UI fades memoized ops
+      expect(bulletOp.fetchPctl).toBe(30);
+      expect(bulletOp.totalPctl).toBe(30);
+    });
+
+    it("tree: memoized query shows 0 but its subgraph-op shows actual duration", () => {
+      const data = parseYamlDashboard(MEMOIZED_SIBLING_YAML);
+      const t = data.tree[50];
+      const siblingQuery = t.nodes.find(
+        (n) => n.type === "query" && n.boundaryPath === "Layout.Sibling",
+      )!;
+      const siblingOp = t.nodes.find(
+        (n) => n.type === "subgraph-op" && n.boundaryPath === "Layout.Sibling",
+      )!;
+      // Query shows remaining time (0 — original resolved before consumer)
+      expect(siblingQuery.cached).toBe(true);
+      expect(siblingQuery.fetchPctl).toBe(0);
+      // But subgraph-op shows actual duration so user sees what the op costs
+      expect(siblingOp.cached).toBe(true);
+      expect(siblingOp.fetchPctl).toBe(60);
+    });
+
     it("computes blocked_ms from thread simulation", () => {
       const data = parseYamlDashboard(TWO_BOUNDARY_YAML);
       const t = data.tree[50];

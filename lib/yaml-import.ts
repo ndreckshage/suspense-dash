@@ -746,10 +746,11 @@ function computeTree(
           type: "subgraph-op",
           boundaryPath: b.path,
           wallStartPctl: 0,
-          fetchPctl: sgData.cached ? 0 : maxDuration,
+          // Show actual duration even for memoized ops (UI fades them)
+          fetchPctl: maxDuration,
           renderCostPctl: 0,
           blockedPctl: 0,
-          totalPctl: sgData.cached ? 0 : maxDuration,
+          totalPctl: maxDuration,
           slo: sgSlo,
           lcpCritical: false,
           cached: sgData.cached,
