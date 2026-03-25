@@ -683,19 +683,8 @@ function computeTree(
       }
       const isCached = q.ops.length > 0 && q.ops.every((op) => resolveOpDuration(op.value, pctl).cached);
 
-      // Compute effective fetch: for memoized queries, show the time this
-      // component actually waited (remaining from prefetch/prior exec).
-      // For noAwait (prefetch), show the full duration (faded in UI).
-      // This keeps boundary, query, and op rows consistent.
-      let effectiveFetch = queryDuration;
-      if (isCached && !q.noAwait) {
-        const source = treePrefetchRegistry.get(q.queryName) ?? treeQueryExecRegistry.get(q.queryName);
-        if (source) {
-          effectiveFetch = Math.max(0, (source.wallStart + source.duration) - wallStart);
-        } else {
-          effectiveFetch = 0;
-        }
-      }
+      // Query/op rows always show raw actual duration (the UI fades memoized rows).
+      // The boundary row already computes its own remaining-time logic separately.
 
       nodes.push({
         name: q.queryName,
@@ -704,10 +693,10 @@ function computeTree(
         type: "query",
         boundaryPath: b.path,
         wallStartPctl: 0,
-        fetchPctl: effectiveFetch,
+        fetchPctl: queryDuration,
         renderCostPctl: 0,
         blockedPctl: 0,
-        totalPctl: effectiveFetch,
+        totalPctl: queryDuration,
         slo: 0,
         lcpCritical: false,
         cached: isCached,
@@ -716,16 +705,13 @@ function computeTree(
         phase: b.phase,
       });
 
-      // Group ops by subgraph — use the effective (remaining) fetch for cached
-      // ops so that boundary→query→op are all consistent
+      // Group ops by subgraph — always use raw actual duration (UI fades memoized)
       const opsBySubgraph = new Map<string, { durations: number[]; cached: boolean }>();
       for (const op of q.ops) {
         const { duration, cached } = resolveOpDuration(op.value, pctl);
         if (cached) cachedOps++; else uncachedOps++;
 
-        // For cached ops, use the query's effective remaining time (not raw duration)
-        // so the op row matches the query and boundary rows
-        const opDuration = cached ? effectiveFetch : duration;
+        const opDuration = duration;
         const existing = opsBySubgraph.get(op.subgraphName);
         if (existing) {
           existing.durations.push(opDuration);
