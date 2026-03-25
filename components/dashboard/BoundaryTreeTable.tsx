@@ -991,11 +991,9 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
                 <td className={`text-right py-1.5 px-2 ${node.cached || node.noAwait ? "text-zinc-700" : "text-zinc-300"}`}>
                   {node.noAwait
                     ? <span className="opacity-50">{node.fetchPctl}ms</span>
-                    : node.cached && node.fetchPctl === 0
-                      ? "0ms"
-                      : node.cached
-                        ? <span className="opacity-60">{node.fetchPctl}ms</span>
-                        : `${node.fetchPctl}ms`}
+                    : node.cached
+                      ? <span className="opacity-60">{node.fetchPctl}ms</span>
+                      : `${node.fetchPctl}ms`}
                 </td>
                 <td className="text-right py-1.5 px-2 text-zinc-300">
                   {node.type === "boundary" ? `${node.renderCostPctl}ms` : ""}
@@ -1012,11 +1010,9 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
                     ? `${node.totalPctl}ms`
                     : node.noAwait
                       ? <span className="opacity-50">{node.fetchPctl}ms</span>
-                      : node.cached && node.fetchPctl === 0
-                        ? "0ms"
-                        : node.cached
-                          ? <span className="opacity-60">{node.fetchPctl}ms</span>
-                          : `${node.fetchPctl}ms`}
+                      : node.cached
+                        ? <span className="opacity-60">{node.fetchPctl}ms</span>
+                        : `${node.fetchPctl}ms`}
                 </td>
                 <td className={`text-right py-1.5 px-2 ${noSlo ? "text-amber-500/70 italic" : "text-zinc-500"}`}>
                   {isSubgraphOp && !node.cached
