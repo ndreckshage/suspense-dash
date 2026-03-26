@@ -603,7 +603,7 @@ export function BoundaryTreeTable({ pctl, mock }: Props) {
                       <span className="w-4 mr-1 flex-shrink-0" />
                     ) : null}
                     {node.type === "subgraph-op" ? (
-                      <span className={`flex items-center gap-1.5 min-w-0 ${node.memoized ? "opacity-50" : ""}`}>
+                      <span className="flex items-center gap-1.5 min-w-0">
                         {(node.subgraphName || node.subgraphColor) && (
                           <span
                             className="w-2 h-2 rounded-full flex-shrink-0"
@@ -618,7 +618,7 @@ export function BoundaryTreeTable({ pctl, mock }: Props) {
                         )}
                       </span>
                     ) : node.type === "query" ? (
-                      <span className={`flex items-center min-w-0 ${node.memoized || node.prefetch ? "opacity-50" : ""}`}>
+                      <span className={`flex items-center min-w-0 ${node.prefetch ? "opacity-50" : ""}`}>
                         {queryHasChildren.has(node.path) ? (
                           <button
                             onClick={(e) => { e.stopPropagation(); toggleQueryExpand(node.path); }}
@@ -679,20 +679,15 @@ export function BoundaryTreeTable({ pctl, mock }: Props) {
                   </div>
                 </td>
                 {/* Query Latency column */}
-                <td className={`text-right py-1.5 px-2 ${node.memoized || node.prefetch ? "text-zinc-700" : "text-zinc-300"}`}>
+                <td className={`text-right py-1.5 px-2 ${node.prefetch ? "text-zinc-700" : "text-zinc-300"}`}>
                   {isSubgraphOp
-                    ? node.memoized
-                      ? <span className="opacity-50">{Math.round(node.queryLatencyPctl)}ms{node.weight > 0 ? ` (${node.weight})` : ""}</span>
-                      : <>{Math.round(node.queryLatencyPctl)}ms{node.weight > 0 ? ` (${node.weight})` : ""}</>
-
+                    ? <>{Math.round(node.queryLatencyPctl)}ms{node.weight > 0 ? ` (${node.weight})` : ""}</>
                     : node.prefetch
                       ? <span className="opacity-50">{node.queryLatencyPctl}ms</span>
-                      : node.memoized
-                        ? <span className="opacity-60">{node.queryLatencyPctl}ms</span>
-                        : `${node.queryLatencyPctl}ms`}
+                      : `${node.queryLatencyPctl}ms`}
                 </td>
                 {/* Subgraph Latency column */}
-                <td className={`text-right py-1.5 px-2 ${node.memoized ? "text-zinc-700" : "text-zinc-300"}`}>
+                <td className="text-right py-1.5 px-2 text-zinc-300">
                   {isSubgraphOp && node.subgraphLatencyPctl > 0
                     ? `${node.subgraphLatencyPctl}ms`
                     : isSubgraphOp ? "\u2014" : ""}
@@ -702,7 +697,11 @@ export function BoundaryTreeTable({ pctl, mock }: Props) {
                   isSubgraphOp && !node.memoized
                     ? sgNoSlo ? "text-amber-500/70 italic" : "text-zinc-500"
                     : isQuery && !node.memoized
-                      ? qNoSlo ? "text-amber-500/70 italic" : "text-zinc-500"
+                      ? qHasSlo
+                        ? "text-zinc-500"
+                        : querySloSummary.has(node.path)
+                          ? querySloSummary.get(node.path)!.sloClass
+                          : "text-amber-500/70 italic"
                       : node.type === "boundary" && querySloSummary.has(node.path)
                         ? querySloSummary.get(node.path)!.sloClass
                         : "text-zinc-500"
@@ -714,20 +713,26 @@ export function BoundaryTreeTable({ pctl, mock }: Props) {
                     : isQuery && !node.memoized
                       ? qHasSlo
                         ? `${node.querySlo}ms`
-                        : "none"
+                        : querySloSummary.has(node.path)
+                          ? querySloSummary.get(node.path)!.sloLabel
+                          : "none"
                       : node.type === "boundary" && querySloSummary.has(node.path)
                         ? querySloSummary.get(node.path)!.sloLabel
                         : ""}
                 </td>
                 {/* Status column */}
                 <td className={`text-center py-1.5 px-2 ${
-                  node.type === "boundary" && querySloSummary.has(node.path)
+                  (isQuery && !qHasSlo && querySloSummary.has(node.path))
                     ? querySloSummary.get(node.path)!.statusColor
-                    : statusColor
+                    : (node.type === "boundary" && querySloSummary.has(node.path))
+                      ? querySloSummary.get(node.path)!.statusColor
+                      : statusColor
                 }`}>
-                  {node.type === "boundary" && querySloSummary.has(node.path)
+                  {(isQuery && !qHasSlo && querySloSummary.has(node.path))
                     ? querySloSummary.get(node.path)!.statusIcon
-                    : statusIcon}
+                    : (node.type === "boundary" && querySloSummary.has(node.path))
+                      ? querySloSummary.get(node.path)!.statusIcon
+                      : statusIcon}
                 </td>
               </tr>
             );

@@ -76,8 +76,15 @@ interface YamlSubgraph {
   latency?: PctlValue;
 }
 
+interface YamlDateRange {
+  from: string;
+  to: string;
+}
+
 interface YamlPage {
   route: string;
+  snapshot_date?: string;
+  latency_date_range?: YamlDateRange;
   queries?: Record<string, YamlQueryDef>;
   subgraphs?: Record<string, YamlSubgraph>;
   hydration_ms?: PctlValue;
@@ -958,5 +965,12 @@ export function parseYamlDashboard(yamlString: string): DashboardData {
     subgraphs[pctl] = computeSubgraphs(ssrRoots, csrRoots, pctl, subgraphColorMap, subgraphSloMap, subgraphLatencyMap);
   }
 
-  return { route: doc.route, waterfall, tree, subgraphs };
+  return {
+    route: doc.route,
+    snapshotDate: doc.snapshot_date,
+    latencyDateRange: doc.latency_date_range,
+    waterfall,
+    tree,
+    subgraphs,
+  };
 }

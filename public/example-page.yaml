@@ -11,6 +11,8 @@
 # views show real per-metric percentile values.
 
 route: /products/[sku]
+snapshot_date: "2026-03-25"
+latency_date_range: { from: "2026-03-18", to: "2026-03-25" }
 
 queries:
   getExperimentContext:

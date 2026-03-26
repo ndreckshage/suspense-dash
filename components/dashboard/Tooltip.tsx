@@ -29,9 +29,9 @@ export function Tooltip({ content, children, className, style }: { content: Reac
       {show && (
         <div
           className="fixed z-50 pointer-events-none"
-          style={{ left: pos.x + 12, top: pos.y - 8 }}
+          style={{ left: Math.min(pos.x + 12, (typeof window !== "undefined" ? window.innerWidth : 9999) - 340), top: pos.y - 8 }}
         >
-          <div className="bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 shadow-xl text-xs font-mono text-zinc-200 max-w-sm">
+          <div className="bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 shadow-xl text-xs font-mono text-zinc-200 max-w-xs break-words overflow-hidden">
             {content}
           </div>
         </div>
@@ -54,9 +54,9 @@ export function TooltipContent({ title, lines, tag }: { title: string; lines: To
         {tag && <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-700 text-zinc-400">{tag}</span>}
       </div>
       {lines.map((line, i) => (
-        <div key={i} className="flex justify-between gap-4">
-          <span className="text-zinc-500">{line.label}</span>
-          <span className={line.color ?? "text-zinc-200"}>{line.value}</span>
+        <div key={i} className="flex justify-between gap-4 min-w-0">
+          <span className="text-zinc-500 flex-shrink-0">{line.label}</span>
+          <span className={`truncate ${line.color ?? "text-zinc-200"}`}>{line.value}</span>
         </div>
       ))}
     </>

@@ -202,6 +202,17 @@ export function DashboardClient({
           </div>
         </div>
 
+        {isYaml && mockData && (mockData.snapshotDate || mockData.latencyDateRange) && (
+          <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-zinc-500">
+            {mockData.snapshotDate && (
+              <span>Snapshot: <span className="text-zinc-400">{mockData.snapshotDate}</span></span>
+            )}
+            {mockData.latencyDateRange && (
+              <span>Latency data: <span className="text-zinc-400">{mockData.latencyDateRange.from} — {mockData.latencyDateRange.to}</span></span>
+            )}
+          </div>
+        )}
+
         {urlError && (
           <div className="p-3 bg-red-950/50 border border-red-800 rounded text-sm text-red-300">
             Failed to load YAML from URL: {urlError}

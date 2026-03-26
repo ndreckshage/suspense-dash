@@ -120,8 +120,18 @@ export interface DashboardSubgraphData {
 
 // ---- Combined dashboard data ----
 
+export interface DashboardDateRange {
+  /** ISO date string (YYYY-MM-DD) or descriptive label */
+  from: string;
+  to: string;
+}
+
 export interface DashboardData {
   route: string;
+  /** Date the snapshot was taken (ISO date string) */
+  snapshotDate?: string;
+  /** Date range for latency data */
+  latencyDateRange?: DashboardDateRange;
   /** Pre-computed data keyed by percentile (50, 75, 90, 95, 99) */
   waterfall: Record<number, DashboardWaterfallData>;
   tree: Record<number, DashboardTreeData>;
