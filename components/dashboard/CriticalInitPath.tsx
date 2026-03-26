@@ -240,7 +240,7 @@ export function CriticalInitPath({
         </p>
         <p>
           Each bar represents a{" "}
-          <strong className="text-zinc-300">Suspense boundary</strong> — an
+          <strong className="text-zinc-300">Suspense boundary</strong>{" "}— an
           independent section of the page that can load and display its content
           on its own timeline. The bar width shows how long that section&apos;s
           data fetch took. The position shows when it started relative to the

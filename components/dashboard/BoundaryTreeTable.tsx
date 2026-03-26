@@ -375,7 +375,7 @@ export function BoundaryTreeTable({ pctl, mock }: Props) {
           backend services that supply the data).
         </p>
         <p>
-          Use the latency column to compare actual response times against each service&apos;s
+          Use the latency column to compare actual response times against each service&apos;s{" "}
           <strong className="text-zinc-300">SLO</strong>{" "}(service-level objective). Red means the service
           exceeded its SLO at this percentile. If no SLO is defined, the cell shows &quot;—&quot;.
         </p>
