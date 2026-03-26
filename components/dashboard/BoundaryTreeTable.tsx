@@ -309,8 +309,15 @@ export function BoundaryTreeTable({ pctl, mock }: Props) {
   if (hasActiveFilter !== prevHadFilter.current) {
     if (hasActiveFilter && !prevHadFilter.current) {
       // First filter applied — expand queries (only if user hasn't manually toggled)
+      // For LCP filter, skip prefetch queries since they're non-blocking
       if (!userToggledQueries.current) {
-        setExpandedQueries(new Set(allQueryPaths));
+        const pathsToExpand = lcpFilter
+          ? allQueryPaths.filter((p) => {
+              const node = treeNodes.find((n) => n.path === p);
+              return node && !node.prefetch;
+            })
+          : allQueryPaths;
+        setExpandedQueries(new Set(pathsToExpand));
       }
     } else if (!hasActiveFilter && prevHadFilter.current) {
       // All filters cleared — collapse queries and reset manual toggle tracking
