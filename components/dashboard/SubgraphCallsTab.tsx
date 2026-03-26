@@ -184,19 +184,19 @@ export function SubgraphCallsTab({ pctl, mock }: Props) {
       <TabDescription title="What does this measure?" storageKey="subgraphs">
         <p>
           This view counts how many times each backend service (subgraph) is called to render a single page
-          load — <strong className="text-zinc-300">before any user interaction</strong> (scroll, click, tap).
+          load — <strong className="text-zinc-300">before any user interaction</strong>{" "}(scroll, click, tap).
           Only initialization traffic is included; lazy-loaded content triggered by scrolling is excluded.
         </p>
         <p>
-          <strong className="text-zinc-300">Calls / request</strong> is the number of times this subgraph is
+          <strong className="text-zinc-300">Calls / request</strong>{" "}is the number of times this subgraph is
           hit per page load. Multiple boundaries may call the same service — expanding a row shows which
           queries and boundaries are responsible. High call counts may indicate an opportunity to optimize
-          the query plan, including reviewing <strong className="text-zinc-300">@key</strong> usage across
+          the query plan, including reviewing <strong className="text-zinc-300">@key</strong>{" "}usage across
           subgraphs to reduce entity resolution round-trips, or batching requests.
         </p>
         <p>
-          <strong className="text-zinc-300">Duration</strong> is the response time at the selected percentile.
-          Compare this against the <strong className="text-zinc-300">SLO</strong> column — if duration exceeds
+          <strong className="text-zinc-300">Subgraph Latency</strong>{" "}is the response time at the selected percentile.
+          Compare this against the <strong className="text-zinc-300">SLO</strong>{" "}column — if latency exceeds
           the SLO, the service is the bottleneck. Services without a defined SLO are flagged so teams can set one.
         </p>
       </TabDescription>
