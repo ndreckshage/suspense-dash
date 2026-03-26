@@ -310,7 +310,7 @@ describe("parseYamlDashboard", () => {
   });
 
   describe("minimal YAML", () => {
-    it("parses and returns MockDashboardData with all percentiles", () => {
+    it("parses and returns DashboardData with all percentiles", () => {
       const data = parseYamlDashboard(MINIMAL_YAML);
       expect(data.route).toBe("/products/[sku]");
       expect(data.waterfall).toBeDefined();

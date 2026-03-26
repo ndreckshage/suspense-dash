@@ -2,9 +2,9 @@
 
 import { useRef, useState } from "react";
 import { parseYamlDashboard } from "@/lib/yaml-import";
-import type { MockDashboardData } from "@/lib/mock-metrics";
+import type { DashboardData } from "@/lib/dashboard-types";
 
-export function YamlUpload({ onLoad }: { onLoad: (data: MockDashboardData) => void }) {
+export function YamlUpload({ onLoad }: { onLoad: (data: DashboardData) => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
 

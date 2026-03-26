@@ -1,6 +1,6 @@
 /**
  * Converts live ClientMetrics (raw sample arrays from localStorage)
- * into MockDashboardData (pre-computed per-percentile views).
+ * into DashboardData (pre-computed per-percentile views).
  *
  * This allows all dashboard components to consume a single data shape,
  * regardless of whether data came from YAML import or live recording.
@@ -19,17 +19,17 @@ import {
 import { percentile, median } from "./percentile";
 import { buildSubgraphColorMap, DEFAULT_SUBGRAPH_COLOR } from "./subgraph-colors";
 import type {
-  MockDashboardData,
-  MockWaterfallData,
-  MockTreeData,
-  MockTreeNode,
-  MockSubgraphData,
-  MockSubgraphRow,
-  MockOperationDetail,
+  DashboardData,
+  DashboardWaterfallData,
+  DashboardTreeData,
+  DashboardTreeNode,
+  DashboardSubgraphData,
+  DashboardSubgraphRow,
+  DashboardOperationDetail,
   WaterfallTiming,
   WaterfallCsrTiming,
-  MockLoAFEntry,
-} from "./mock-metrics";
+  DashboardLoAFEntry,
+} from "./dashboard-types";
 
 const PCTLS = [50, 75, 90, 95, 99];
 
@@ -181,7 +181,7 @@ function buildTreeFromMetrics(
 function computeWaterfallFromLive(
   metrics: ClientMetrics,
   pctl: number,
-): MockWaterfallData {
+): DashboardWaterfallData {
   const ssrBoundaries = metrics.boundaries.filter((b) => b.phase !== "csr");
   const csrBoundaries = metrics.boundaries.filter((b) => b.phase === "csr");
   const ssrQueries = metrics.queries.filter((q) => q.phase !== "csr");
@@ -301,7 +301,7 @@ function computeWaterfallFromLive(
   const rawLoaf = representativeRequestId && metrics.loafEntries
     ? metrics.loafEntries[representativeRequestId] ?? []
     : [];
-  const loafEntries: MockLoAFEntry[] = rawLoaf.map((e) => ({
+  const loafEntries: DashboardLoAFEntry[] = rawLoaf.map((e) => ({
     startTime: e.startTime,
     duration: e.duration,
     blockingDuration: e.blockingDuration,
@@ -333,7 +333,7 @@ function computeWaterfallFromLive(
 function computeTreeFromLive(
   metrics: ClientMetrics,
   pctl: number,
-): MockTreeData {
+): DashboardTreeData {
   const { boundaries, queries, subgraphOps } = metrics;
 
   if (boundaries.length === 0 && queries.length === 0) {
@@ -417,7 +417,7 @@ function computeTreeFromLive(
   }
   const colorMap = buildSubgraphColorMap(subgraphNames);
 
-  const nodes: MockTreeNode[] = [];
+  const nodes: DashboardTreeNode[] = [];
 
   for (const item of treeStructure) {
     const depth = item.type === "boundary"
@@ -499,6 +499,19 @@ function computeTreeFromLive(
         : durations;
       const durationPctl = percentile(sourceDurations, pctl);
 
+      // Derive weight from op duration / parent query duration
+      const parentQueryKey = `${item.boundaryPath}:${item.queryName}`;
+      const parentQueryMetrics = queryByKey.get(parentQueryKey) ?? [];
+      const parentQueryDurations = parentQueryMetrics.map((m) => m.duration_ms);
+      const parentIsCached = parentQueryMetrics.length > 0 && parentQueryMetrics.every((m) => m.fullyCached);
+      const parentSourceDurations = parentIsCached
+        ? (actualQueryDuration.get(item.queryName!) ?? parentQueryDurations)
+        : parentQueryDurations;
+      const parentQueryPctl = percentile(parentSourceDurations, pctl);
+      const derivedWeight = parentQueryPctl > 0
+        ? Math.round((durationPctl / parentQueryPctl) * 100) / 100
+        : 0;
+
       nodes.push({
         name: sgName,
         path: item.path,
@@ -509,7 +522,7 @@ function computeTreeFromLive(
         subgraphLatencyPctl: durationPctl,
         querySlo: 0,
         subgraphSlo: sgSlo,
-        weight: 0,
+        weight: derivedWeight,
         lcpCritical: false,
         memoized: isCached,
         prefetch: false,
@@ -555,11 +568,21 @@ function computeTreeFromLive(
 function computeSubgraphsFromLive(
   metrics: ClientMetrics,
   pctl: number,
-): MockSubgraphData {
-  const { subgraphOps } = metrics;
+): DashboardSubgraphData {
+  const { subgraphOps, queries } = metrics;
 
   if (subgraphOps.length === 0) {
     return { summary: { ssrCallsPerReq: 0, csrCallsPerReq: 0, dedupedPerReq: 0 }, rows: [] };
+  }
+
+  // Build query duration lookup for weight derivation
+  const queryDurationsByName = new Map<string, number[]>();
+  for (const q of queries) {
+    if (!q.fullyCached) {
+      const list = queryDurationsByName.get(q.queryName) ?? [];
+      list.push(q.duration_ms);
+      queryDurationsByName.set(q.queryName, list);
+    }
   }
 
   const requestIds = new Set(subgraphOps.map((o) => o.requestId));
@@ -599,7 +622,7 @@ function computeSubgraphsFromLive(
     }
   }
 
-  const rows: MockSubgraphRow[] = [];
+  const rows: DashboardSubgraphRow[] = [];
 
   for (const [sgName, sgUncachedOps] of uncachedBySubgraph) {
     const color = SUBGRAPHS[sgName as SubgraphName]?.color ?? colorMap.get(sgName) ?? DEFAULT_SUBGRAPH_COLOR;
@@ -627,16 +650,22 @@ function computeSubgraphsFromLive(
 
     const durations = sgUncachedOps.map((o) => o.duration_ms);
 
-    const operations: MockOperationDetail[] = [...callerBase.entries()].map(([key, c]) => ({
-      name: c.queryName,
-      callsPerReq: Math.round(((callerDurations.get(key)?.length ?? 0) / numRequests) * 10) / 10,
-      weight: 0,
-      queryLatencyPctl: 0,
-      durationPctl: percentile(callerDurations.get(key) ?? [], pctl),
-      boundaries: [c.boundary],
-      queryNames: [c.queryName],
-      isClient: c.isClient,
-    }));
+    const operations: DashboardOperationDetail[] = [...callerBase.entries()].map(([key, c]) => {
+      const opDur = percentile(callerDurations.get(key) ?? [], pctl);
+      const qDurations = queryDurationsByName.get(c.queryName) ?? [];
+      const qDur = percentile(qDurations, pctl);
+      const derivedWeight = qDur > 0 ? Math.round((opDur / qDur) * 100) / 100 : 0;
+      return {
+        name: c.queryName,
+        callsPerReq: Math.round(((callerDurations.get(key)?.length ?? 0) / numRequests) * 10) / 10,
+        weight: derivedWeight,
+        queryLatencyPctl: qDur,
+        durationPctl: opDur,
+        boundaries: [c.boundary],
+        queryNames: [c.queryName],
+        isClient: c.isClient,
+      };
+    });
 
     operations.sort((a, b) => b.callsPerReq - a.callsPerReq);
 
@@ -657,12 +686,12 @@ function computeSubgraphsFromLive(
 
 // ---- Main entry point ----
 
-export function convertLiveMetrics(metrics: ClientMetrics): MockDashboardData {
+export function convertLiveMetrics(metrics: ClientMetrics): DashboardData {
   const route = metrics.boundaries[0]?.route ?? "/unknown";
 
-  const waterfall: Record<number, MockWaterfallData> = {};
-  const tree: Record<number, MockTreeData> = {};
-  const subgraphs: Record<number, MockSubgraphData> = {};
+  const waterfall: Record<number, DashboardWaterfallData> = {};
+  const tree: Record<number, DashboardTreeData> = {};
+  const subgraphs: Record<number, DashboardSubgraphData> = {};
 
   for (const pctl of PCTLS) {
     waterfall[pctl] = computeWaterfallFromLive(metrics, pctl);

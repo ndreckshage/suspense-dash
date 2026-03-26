@@ -1,5 +1,5 @@
 /**
- * YAML-to-MockDashboardData transformer.
+ * YAML-to-DashboardData transformer.
  *
  * Parses a human-friendly YAML file with top-level query definitions,
  * subgraph latency profiles, and a boundary tree that references queries
@@ -16,17 +16,17 @@ import { parse as parseYaml } from "yaml";
 import type { NavigationTiming } from "./client-metrics-store";
 import { buildSubgraphColorMap, DEFAULT_SUBGRAPH_COLOR } from "./subgraph-colors";
 import type {
-  MockDashboardData,
-  MockWaterfallData,
-  MockTreeData,
-  MockTreeNode,
-  MockSubgraphData,
-  MockSubgraphRow,
-  MockOperationDetail,
+  DashboardData,
+  DashboardWaterfallData,
+  DashboardTreeData,
+  DashboardTreeNode,
+  DashboardSubgraphData,
+  DashboardSubgraphRow,
+  DashboardOperationDetail,
   WaterfallTiming,
   WaterfallCsrTiming,
-  MockLoAFEntry,
-} from "./mock-metrics";
+  DashboardLoAFEntry,
+} from "./dashboard-types";
 
 // ---- YAML schema types ----
 
@@ -264,11 +264,11 @@ function computeWaterfall(
   hydrationMs: number,
   initializationMs: number,
   navTiming: NavigationTiming | null,
-  loafEntries: MockLoAFEntry[],
+  loafEntries: DashboardLoAFEntry[],
   colorMap: Map<string, string>,
   networkOffsetMs: number,
   lcpImageLatencyMs: number,
-): MockWaterfallData {
+): DashboardWaterfallData {
   const flat = flattenTree(ssrBoundaries);
 
   // Compute each boundary's query duration at p50 and at the target pctl
@@ -484,7 +484,7 @@ function computeTree(
   colorMap: Map<string, string>,
   sloMap: Map<string, number>,
   subgraphLatencyMap: Map<string, PctlValue>,
-): MockTreeData {
+): DashboardTreeData {
   const allBoundaries = [...flattenTree(ssrRoots), ...flattenTree(csrRoots)];
   const allPaths = new Set(allBoundaries.map((b) => b.path));
 
@@ -557,7 +557,7 @@ function computeTree(
     scheduleBoundaries(csrRoots, 0);
   }
 
-  const nodes: MockTreeNode[] = [];
+  const nodes: DashboardTreeNode[] = [];
   let uncachedOps = 0;
   let cachedOps = 0;
 
@@ -701,7 +701,7 @@ function computeSubgraphs(
   colorMap: Map<string, string>,
   sloMap: Map<string, number>,
   subgraphLatencyMap: Map<string, PctlValue>,
-): MockSubgraphData {
+): DashboardSubgraphData {
   const allBoundaries = [...flattenTree(ssrRoots), ...flattenTree(csrRoots)];
 
   let ssrUncached = 0;
@@ -765,10 +765,10 @@ function computeSubgraphs(
     }
   }
 
-  const rows: MockSubgraphRow[] = [];
+  const rows: DashboardSubgraphRow[] = [];
   for (const [sgName, sg] of opsBySubgraph) {
     const color = colorMap.get(sgName) ?? DEFAULT_SUBGRAPH_COLOR;
-    const operations: MockOperationDetail[] = [];
+    const operations: DashboardOperationDetail[] = [];
 
     let sgUncachedCount = 0;
 
@@ -819,7 +819,7 @@ function computeSubgraphs(
 
 // ---- Main entry point ----
 
-export function parseYamlDashboard(yamlString: string): MockDashboardData {
+export function parseYamlDashboard(yamlString: string): DashboardData {
   const doc = parseYaml(yamlString) as YamlPage;
 
   if (!doc || typeof doc !== "object") {
@@ -904,9 +904,9 @@ export function parseYamlDashboard(yamlString: string): MockDashboardData {
   }
 
   // Compute pre-computed data for each percentile
-  const waterfall: Record<number, MockWaterfallData> = {};
-  const tree: Record<number, MockTreeData> = {};
-  const subgraphs: Record<number, MockSubgraphData> = {};
+  const waterfall: Record<number, DashboardWaterfallData> = {};
+  const tree: Record<number, DashboardTreeData> = {};
+  const subgraphs: Record<number, DashboardSubgraphData> = {};
 
   // Default offsets: 20ms edge/network overhead, 80ms browser image latency
   const DEFAULT_NETWORK_OFFSET = 20;
@@ -938,7 +938,7 @@ export function parseYamlDashboard(yamlString: string): MockDashboardData {
     }
 
     // Convert YAML LoAF entries to mock format (same entries at all percentiles)
-    const loafEntries: MockLoAFEntry[] = (doc.loaf_entries ?? []).map((e) => ({
+    const loafEntries: DashboardLoAFEntry[] = (doc.loaf_entries ?? []).map((e) => ({
       startTime: e.start,
       duration: e.duration,
       blockingDuration: e.blocking,

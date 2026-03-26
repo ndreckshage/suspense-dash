@@ -8,7 +8,7 @@ import {
   clientMetricsStore,
   type ClientMetrics,
 } from "@/lib/client-metrics-store";
-import type { MockDashboardData } from "@/lib/mock-metrics";
+import type { DashboardData } from "@/lib/dashboard-types";
 import { parseYamlDashboard } from "@/lib/yaml-import";
 import { convertLiveMetrics } from "@/lib/live-metrics-to-mock";
 import { YamlUpload } from "@/components/dashboard/YamlUpload";
@@ -28,7 +28,7 @@ export function DashboardClient({
   runUrl?: string;
 }) {
   const [metrics, setMetrics] = useState<ClientMetrics | null>(null);
-  const [yamlData, setYamlData] = useState<MockDashboardData | null>(null);
+  const [yamlData, setYamlData] = useState<DashboardData | null>(null);
   const [activeTab, setActiveTabState] = useState<TabKey>(initialTab);
   const [loading, setLoading] = useState(true);
   const [pctl, setPctl] = useState<number>(99);
@@ -68,7 +68,7 @@ export function DashboardClient({
   }, []);
 
   const loadYamlData = useCallback(
-    (data: MockDashboardData, source: DataSource = "yaml-file") => {
+    (data: DashboardData, source: DataSource = "yaml-file") => {
       setYamlData(data);
       setMetrics(null);
       setDataSource(source);
@@ -128,8 +128,8 @@ export function DashboardClient({
 
   const isYaml = yamlData !== null;
 
-  // Convert live metrics to MockDashboardData (unified data shape)
-  const mockData: MockDashboardData | null = useMemo(() => {
+  // Convert live metrics to DashboardData (unified data shape)
+  const mockData: DashboardData | null = useMemo(() => {
     if (yamlData) return yamlData;
     if (metrics && metrics.totalPageLoads > 0) return convertLiveMetrics(metrics);
     return null;

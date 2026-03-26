@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useCallback } from "react";
-import type { MockSubgraphData } from "@/lib/mock-metrics";
+import type { DashboardSubgraphData } from "@/lib/dashboard-types";
 import { buildSubgraphColorMap, DEFAULT_SUBGRAPH_COLOR } from "@/lib/subgraph-colors";
 import { TabDescription } from "./TabDescription";
 import { Tooltip } from "./Tooltip";
@@ -9,7 +9,7 @@ import { Tooltip } from "./Tooltip";
 interface Props {
   pctl: number;
   /** Pre-computed data keyed by percentile (from YAML or live conversion) */
-  mock: Record<number, MockSubgraphData>;
+  mock: Record<number, DashboardSubgraphData>;
 }
 
 interface CallerDetail {

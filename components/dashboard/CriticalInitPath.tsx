@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useCallback } from "react";
-import type { MockWaterfallData } from "@/lib/mock-metrics";
+import type { DashboardWaterfallData } from "@/lib/dashboard-types";
 import {
   filterLoafsByCsrCutoff,
   mergeLoafEntries,
@@ -14,7 +14,7 @@ import type { TooltipLine } from "./Tooltip";
 interface Props {
   pctl: number;
   /** Pre-computed data keyed by percentile (from YAML or live conversion) */
-  mock: Record<number, MockWaterfallData>;
+  mock: Record<number, DashboardWaterfallData>;
 }
 
 interface BoundaryTiming {

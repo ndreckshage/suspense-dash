@@ -51,6 +51,45 @@ The dashboard visualizes these metrics across multiple page loads with percentil
 └─────────────────────────────────────────────────────────┘
 ```
 
+### Data Flow
+
+All dashboard components consume a single canonical type: `DashboardData` (`lib/dashboard-types.ts`) — pre-computed views keyed by percentile. Two data sources converge on this shape:
+
+**Live recorded metrics** (visiting the product page):
+
+```
+Product page → TracedBoundary records BoundaryMetric/QueryMetric/SubgraphOperationMetric
+  → MetricsEmbed embeds as JSON in HTML
+  → MetricsCollector stores to localStorage (ClientMetrics — raw sample arrays)
+  → Dashboard: convertLiveMetrics(ClientMetrics) → DashboardData
+```
+
+`convertLiveMetrics()` (`lib/live-metrics-to-mock.ts`) selects a representative page load at each percentile for the waterfall, computes percentile aggregates for tree/subgraph views, and derives op weights from measured durations.
+
+**YAML import** (declared performance profiles):
+
+```
+YAML file → parseYamlDashboard() → DashboardData
+```
+
+`parseYamlDashboard()` (`lib/yaml-import.ts`) parses a YAML file with top-level query definitions (latency percentile maps + subgraph op weights), subgraph service latency profiles, and a boundary tree referencing queries by name. The waterfall uses a "fudging" algorithm where the highest-variance query drives the page time while others stay near p50.
+
+```
+DashboardClient
+  ├─ Live: ClientMetrics → convertLiveMetrics() → DashboardData
+  ├─ YAML: parseYamlDashboard() → DashboardData
+  └─ Components (one code path each):
+     ├─ CriticalInitPath  — waterfall[pctl]
+     ├─ BoundaryTreeTable — tree[pctl]
+     └─ SubgraphCallsTab  — subgraphs[pctl]
+```
+
+**YAML schema** — see `public/example-page.yaml` for a full example. Key concepts:
+- **Query latency** — real end-to-end percentiles per GraphQL query
+- **Op weights** — proportional subgraph contribution (0–1) from trace data
+- **Subgraph latency** — service-wide latency percentiles per subgraph
+- **prefetch** / **memoized** — boundary query modifiers for React cache() dedup modeling
+
 ### Tech Stack
 
 - **Next.js 16** (App Router, React Server Components, React 19)
@@ -155,20 +194,22 @@ Toggle via the "Slow" button in the PDP nav bar (or add `?slow=1` to the URL). M
 
 ## Key Files
 
-| File                              | Purpose                                |
-| --------------------------------- | -------------------------------------- |
-| `app/products/[sku]/page.tsx`     | PDP with 14 traced Suspense boundaries |
-| `app/dashboard/page.tsx`          | Metrics dashboard (client component)   |
-| `components/TracedBoundary.tsx`   | Core instrumentation wrapper           |
-| `components/MetricsEmbed.tsx`     | Server → client metrics transport      |
-| `components/MetricsCollector.tsx` | Client-side metrics ingestion          |
-| `lib/metrics-store.ts`            | Metric types + server-side store       |
-| `lib/client-metrics-store.ts`     | Client localStorage store + seed logic |
-| `lib/gql-federation.ts`           | Subgraph & query definitions           |
-| `lib/gql-query.ts`                | Query execution + dedup via cache()    |
-| `lib/busy-wait.ts`                | Sync thread-blocking simulation        |
-| `components/dashboard/*`          | Dashboard tab components               |
-| `components/pdp/*`                | PDP UI components                      |
+| File                              | Purpose                                     |
+| --------------------------------- | ------------------------------------------- |
+| `app/products/[sku]/page.tsx`     | PDP with 14 traced Suspense boundaries      |
+| `app/dashboard/dashboard-client.tsx` | Dashboard orchestrator (live + YAML)     |
+| `lib/dashboard-types.ts`          | Canonical `DashboardData` type definitions   |
+| `lib/yaml-import.ts`             | YAML → DashboardData conversion              |
+| `lib/live-metrics-to-mock.ts`    | ClientMetrics → DashboardData conversion     |
+| `components/TracedBoundary.tsx`   | Core instrumentation wrapper                 |
+| `components/MetricsEmbed.tsx`     | Server → client metrics transport            |
+| `components/MetricsCollector.tsx` | Client-side metrics ingestion                |
+| `lib/metrics-store.ts`            | Raw metric types + server-side store        |
+| `lib/client-metrics-store.ts`     | Client localStorage store + seed logic      |
+| `lib/gql-federation.ts`           | Subgraph & query definitions                |
+| `lib/gql-query.ts`                | Query execution + dedup via cache()         |
+| `components/dashboard/*`          | Dashboard tab components (pure renderers)   |
+| `public/example-page.yaml`       | Example YAML performance profile             |
 
 ## Production Path
 

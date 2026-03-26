@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useCallback, useRef } from "react";
-import type { MockTreeData } from "@/lib/mock-metrics";
+import type { DashboardTreeData } from "@/lib/dashboard-types";
 import { buildSubgraphColorMap, DEFAULT_SUBGRAPH_COLOR } from "@/lib/subgraph-colors";
 import { TabDescription } from "./TabDescription";
 import { Tooltip } from "./Tooltip";
@@ -9,7 +9,7 @@ import { Tooltip } from "./Tooltip";
 interface Props {
   pctl: number;
   /** Pre-computed data keyed by percentile (from YAML or live conversion) */
-  mock: Record<number, MockTreeData>;
+  mock: Record<number, DashboardTreeData>;
 }
 
 function getParentPath(path: string): string | null {
@@ -672,8 +672,9 @@ export function BoundaryTreeTable({ pctl, mock }: Props) {
                 <td className={`text-right py-1.5 px-2 ${node.memoized || node.prefetch ? "text-zinc-700" : "text-zinc-300"}`}>
                   {isSubgraphOp
                     ? node.memoized
-                      ? <span className="opacity-50">{Math.round(node.queryLatencyPctl)}ms ({node.weight})</span>
-                      : `${Math.round(node.queryLatencyPctl)}ms (${node.weight})`
+                      ? <span className="opacity-50">{Math.round(node.queryLatencyPctl)}ms{node.weight > 0 ? ` (${node.weight})` : ""}</span>
+                      : <>{Math.round(node.queryLatencyPctl)}ms{node.weight > 0 ? ` (${node.weight})` : ""}</>
+
                     : node.prefetch
                       ? <span className="opacity-50">{node.queryLatencyPctl}ms</span>
                       : node.memoized
