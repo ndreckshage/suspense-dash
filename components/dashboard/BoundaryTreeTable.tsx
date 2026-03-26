@@ -697,7 +697,11 @@ export function BoundaryTreeTable({ pctl, mock }: Props) {
                   isSubgraphOp && !node.memoized
                     ? sgNoSlo ? "text-amber-500/70 italic" : "text-zinc-500"
                     : isQuery && !node.memoized
-                      ? qNoSlo ? "text-amber-500/70 italic" : "text-zinc-500"
+                      ? qHasSlo
+                        ? "text-zinc-500"
+                        : querySloSummary.has(node.path)
+                          ? querySloSummary.get(node.path)!.sloClass
+                          : "text-amber-500/70 italic"
                       : node.type === "boundary" && querySloSummary.has(node.path)
                         ? querySloSummary.get(node.path)!.sloClass
                         : "text-zinc-500"
@@ -709,20 +713,26 @@ export function BoundaryTreeTable({ pctl, mock }: Props) {
                     : isQuery && !node.memoized
                       ? qHasSlo
                         ? `${node.querySlo}ms`
-                        : "none"
+                        : querySloSummary.has(node.path)
+                          ? querySloSummary.get(node.path)!.sloLabel
+                          : "none"
                       : node.type === "boundary" && querySloSummary.has(node.path)
                         ? querySloSummary.get(node.path)!.sloLabel
                         : ""}
                 </td>
                 {/* Status column */}
                 <td className={`text-center py-1.5 px-2 ${
-                  node.type === "boundary" && querySloSummary.has(node.path)
+                  (isQuery && !qHasSlo && querySloSummary.has(node.path))
                     ? querySloSummary.get(node.path)!.statusColor
-                    : statusColor
+                    : (node.type === "boundary" && querySloSummary.has(node.path))
+                      ? querySloSummary.get(node.path)!.statusColor
+                      : statusColor
                 }`}>
-                  {node.type === "boundary" && querySloSummary.has(node.path)
+                  {(isQuery && !qHasSlo && querySloSummary.has(node.path))
                     ? querySloSummary.get(node.path)!.statusIcon
-                    : statusIcon}
+                    : (node.type === "boundary" && querySloSummary.has(node.path))
+                      ? querySloSummary.get(node.path)!.statusIcon
+                      : statusIcon}
                 </td>
               </tr>
             );
