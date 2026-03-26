@@ -20,10 +20,10 @@ export interface WaterfallTiming {
   lcpCritical: boolean;
   queryName: string;
   queryNames: string[];
-  cached: boolean;
+  memoized: boolean;
   /** Color of the heaviest subgraph in this boundary's queries */
   subgraphColor?: string;
-  /** Query names that were prefetched (await: false) by this boundary */
+  /** Query names that were prefetched (prefetch: true) by this boundary */
   prefetchQueries?: string[];
 }
 
@@ -64,20 +64,22 @@ export interface MockTreeNode {
   depth: number;
   type: "boundary" | "query" | "subgraph-op";
   boundaryPath: string;
-  wallStartPctl: number;
-  fetchPctl: number;
-  renderCostPctl: number;
-  blockedPctl: number;
-  totalPctl: number;
-  slo: number;
+  // NEW columns
+  queryLatencyPctl: number;      // query: actual latency at pctl; subgraph: weight × query latency; boundary: max of awaited query latencies
+  subgraphLatencyPctl: number;   // subgraph: real from subgraphs section; 0 for boundary/query
+  querySlo: number;              // query/boundary: query-level SLO; 0 for subgraph
+  subgraphSlo: number;           // subgraph: subgraph-level SLO; 0 for boundary/query
+  weight: number;                // subgraph-op: the weight (0–1); 0 for boundary/query
   lcpCritical: boolean;
-  cached: boolean;
-  /** Query was prefetched (await: false) — fires but doesn't suspend */
-  noAwait?: boolean;
+  memoized: boolean;
+  prefetch: boolean;
   subgraphName?: string;
   subgraphColor?: string;
   hasChildren: boolean;
   phase?: "ssr" | "csr";
+  // KEEP for waterfall computation (internal use, not displayed in tree columns)
+  wallStartPctl: number;
+  renderCostPctl: number;
 }
 
 export interface MockTreeData {
@@ -88,9 +90,11 @@ export interface MockTreeData {
 // ---- Subgraph (SubgraphCallsTab) ----
 
 export interface MockOperationDetail {
-  name: string;
+  name: string;           // query name
   callsPerReq: number;
-  durationPctl: number;
+  weight: number;         // the op weight (0–1)
+  queryLatencyPctl: number; // parent query's latency at pctl
+  durationPctl: number;   // KEEP for compatibility — weight × queryLatencyPctl
   boundaries: string[];
   queryNames: string[];
   isClient: boolean;
@@ -101,7 +105,7 @@ export interface MockSubgraphRow {
   color: string;
   sloMs: number;
   callsPerReq: number;
-  durationPctl: number;
+  subgraphLatencyPctl: number;   // real subgraph latency from YAML
   operations: MockOperationDetail[];
 }
 

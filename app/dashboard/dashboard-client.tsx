@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { BoundaryTreeTable } from "@/components/dashboard/BoundaryTreeTable";
 import { CriticalInitPath } from "@/components/dashboard/CriticalInitPath";
 import { SubgraphCallsTab } from "@/components/dashboard/SubgraphCallsTab";
@@ -10,6 +10,7 @@ import {
 } from "@/lib/client-metrics-store";
 import type { MockDashboardData } from "@/lib/mock-metrics";
 import { parseYamlDashboard } from "@/lib/yaml-import";
+import { convertLiveMetrics } from "@/lib/live-metrics-to-mock";
 import { YamlUpload } from "@/components/dashboard/YamlUpload";
 
 const PERCENTILE_OPTIONS = [50, 75, 90, 95, 99] as const;
@@ -27,7 +28,7 @@ export function DashboardClient({
   runUrl?: string;
 }) {
   const [metrics, setMetrics] = useState<ClientMetrics | null>(null);
-  const [mockData, setMockData] = useState<MockDashboardData | null>(null);
+  const [yamlData, setYamlData] = useState<MockDashboardData | null>(null);
   const [activeTab, setActiveTabState] = useState<TabKey>(initialTab);
   const [loading, setLoading] = useState(true);
   const [pctl, setPctl] = useState<number>(99);
@@ -59,16 +60,16 @@ export function DashboardClient({
 
   const refreshMetrics = useCallback(() => {
     setLoading(true);
-    setMockData(null);
+    setYamlData(null);
     setDataSource("demo");
     const data = clientMetricsStore.getMetrics();
     setMetrics(data);
     setLoading(false);
   }, []);
 
-  const loadMockData = useCallback(
+  const loadYamlData = useCallback(
     (data: MockDashboardData, source: DataSource = "yaml-file") => {
-      setMockData(data);
+      setYamlData(data);
       setMetrics(null);
       setDataSource(source);
       setLoading(false);
@@ -93,7 +94,7 @@ export function DashboardClient({
       .then((text) => {
         if (cancelled) return;
         const data = parseYamlDashboard(text);
-        loadMockData(data, "yaml-url");
+        loadYamlData(data, "yaml-url");
       })
       .catch((err) => {
         if (cancelled) return;
@@ -105,7 +106,7 @@ export function DashboardClient({
     return () => {
       cancelled = true;
     };
-  }, [runUrl, loadMockData]);
+  }, [runUrl, loadYamlData]);
 
   useEffect(() => {
     if (runUrl) return; // skip seed when loading from URL
@@ -114,19 +115,27 @@ export function DashboardClient({
 
   function clearMetrics() {
     clientMetricsStore.clear();
-    setMockData(null);
+    setYamlData(null);
     refreshMetrics();
   }
 
   async function loadDemoData() {
     setLoading(true);
-    setMockData(null);
+    setYamlData(null);
     await clientMetricsStore.loadSeedData();
     refreshMetrics();
   }
 
-  const isMock = mockData !== null;
-  const hasData = isMock || (metrics !== null && metrics.totalPageLoads > 0);
+  const isYaml = yamlData !== null;
+
+  // Convert live metrics to MockDashboardData (unified data shape)
+  const mockData: MockDashboardData | null = useMemo(() => {
+    if (yamlData) return yamlData;
+    if (metrics && metrics.totalPageLoads > 0) return convertLiveMetrics(metrics);
+    return null;
+  }, [yamlData, metrics]);
+
+  const hasData = mockData !== null;
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 px-4 py-8 md:px-6 md:py-12 font-mono overflow-x-hidden">
@@ -138,12 +147,12 @@ export function DashboardClient({
               <h1 className="text-base md:text-xl font-bold text-white">
                 Suspense Dash
               </h1>
-              {isMock && (
+              {isYaml && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-900/50 border border-blue-800 text-blue-300">
                   {dataSource === "yaml-url" ? "LINK" : "YAML"}
                 </span>
               )}
-              {!isMock && metrics && metrics.totalPageLoads > 0 && (
+              {!isYaml && metrics && metrics.totalPageLoads > 0 && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-900/50 border border-emerald-800 text-emerald-300">
                   DEMO
                 </span>
@@ -162,13 +171,13 @@ export function DashboardClient({
                 ))}
               </select>
               <span className="text-xs text-zinc-500 truncate hidden sm:inline">
-                {isMock
-                  ? `${mockData.route}${dataSource === "yaml-url" ? ` — ${runUrl}` : " — YAML import"}`
+                {isYaml
+                  ? `${mockData!.route}${dataSource === "yaml-url" ? ` — ${runUrl}` : " — YAML import"}`
                   : `/products/[sku] — ${metrics ? `${metrics.totalPageLoads} loads` : "loading..."}`}
               </span>
               <span className="text-xs text-zinc-500 truncate sm:hidden">
-                {isMock
-                  ? mockData.route
+                {isYaml
+                  ? mockData!.route
                   : metrics
                     ? `${metrics.totalPageLoads} loads`
                     : "loading..."}
@@ -176,7 +185,7 @@ export function DashboardClient({
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-            {!isMock && hasData && (
+            {!isYaml && hasData && (
               <button
                 onClick={clearMetrics}
                 className="px-2.5 py-1 text-xs border border-zinc-700 rounded text-zinc-500 hover:text-red-300 hover:border-red-800 transition-colors"
@@ -265,35 +274,25 @@ export function DashboardClient({
             </div>
           ) : activeTab === "lcp" ? (
             <CriticalInitPath
-              boundaries={metrics?.boundaries ?? []}
-              queries={metrics?.queries ?? []}
               pctl={pctl}
-              hydrationTimes={metrics?.hydrationTimes}
-              loafEntries={metrics?.loafEntries}
-              navigationTimings={metrics?.navigationTimings}
-              mock={mockData?.waterfall}
+              mock={mockData!.waterfall}
             />
           ) : activeTab === "tree" ? (
             <BoundaryTreeTable
-              boundaries={metrics?.boundaries ?? []}
-              queries={metrics?.queries ?? []}
-              subgraphOps={metrics?.subgraphOps ?? []}
               pctl={pctl}
-              mock={mockData?.tree}
+              mock={mockData!.tree}
             />
           ) : (
             <SubgraphCallsTab
-              queries={metrics?.queries ?? []}
-              subgraphOps={metrics?.subgraphOps ?? []}
               pctl={pctl}
-              mock={mockData?.subgraphs}
+              mock={mockData!.subgraphs}
             />
           )}
         </div>
 
         {/* Actions */}
         <div className="flex items-center justify-center gap-3 pt-2 pb-4">
-          <YamlUpload onLoad={loadMockData} />
+          <YamlUpload onLoad={loadYamlData} />
           <button
             onClick={loadDemoData}
             className="px-3 py-1.5 text-sm border border-zinc-700 rounded text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 transition-colors"

@@ -1,196 +1,21 @@
 "use client";
 
 import { useMemo, useState, useCallback, useRef } from "react";
-import type {
-  BoundaryMetric,
-  QueryMetric,
-  SubgraphOperationMetric,
-} from "@/lib/metrics-store";
-import {
-  SUBGRAPHS,
-  type SubgraphName,
-} from "@/lib/gql-federation";
-import { percentile, median as medianUtil } from "@/lib/percentile";
 import type { MockTreeData } from "@/lib/mock-metrics";
 import { buildSubgraphColorMap, DEFAULT_SUBGRAPH_COLOR } from "@/lib/subgraph-colors";
 import { TabDescription } from "./TabDescription";
 import { Tooltip } from "./Tooltip";
 
 interface Props {
-  boundaries: BoundaryMetric[];
-  queries: QueryMetric[];
-  subgraphOps: SubgraphOperationMetric[];
   pctl: number;
-  /** Pre-computed mock data keyed by percentile */
-  mock?: Record<number, MockTreeData>;
+  /** Pre-computed data keyed by percentile (from YAML or live conversion) */
+  mock: Record<number, MockTreeData>;
 }
 
-// --- Tree structure: boundary → query → subgraph-op ---
-
-interface TreeItem {
-  path: string;
-  name: string;
-  type: "boundary" | "query" | "subgraph-op";
-  boundaryPath: string;
-  queryName?: string;
-  opName?: string;
-  subgraphName?: string;
-  lcpCritical?: boolean;
-  phase?: "ssr" | "csr";
-}
-
-/**
- * Dynamically builds the tree structure from recorded metrics.
- * Boundaries are ordered by median wall_start_ms, with queries and
- * subgraph-ops nested underneath their parent boundary.
- */
-/**
- * Returns the parent boundary path for a given path.
- * e.g. "Layout.Content.Main.Hero" → "Layout.Content.Main"
- *      "Layout.Nav" → "Layout"
- *      "Layout" → null
- *      "Layout.Nav.CartIndicator" → "Layout.Nav"
- */
 function getParentPath(path: string): string | null {
   const idx = path.lastIndexOf(".");
   return idx === -1 ? null : path.substring(0, idx);
 }
-
-function buildTreeFromMetrics(
-  boundaries: BoundaryMetric[],
-  queries: QueryMetric[],
-  subgraphOps: SubgraphOperationMetric[],
-): TreeItem[] {
-  // 1. Collect unique boundary paths with median wall_start_ms
-  const wallStartsByPath = new Map<string, number[]>();
-  const lcpByPath = new Map<string, boolean>();
-  const phaseByPath = new Map<string, "ssr" | "csr">();
-  for (const b of boundaries) {
-    const list = wallStartsByPath.get(b.boundary_path) ?? [];
-    list.push(b.wall_start_ms);
-    wallStartsByPath.set(b.boundary_path, list);
-    if (b.is_lcp_critical) lcpByPath.set(b.boundary_path, true);
-    phaseByPath.set(b.boundary_path, b.phase ?? "ssr");
-  }
-
-  const allPaths = [...wallStartsByPath.keys()];
-  const medianByPath = new Map<string, number>();
-  for (const path of allPaths) {
-    medianByPath.set(path, median(wallStartsByPath.get(path)!));
-  }
-
-  // 2. Build parent→children map, respecting the dot-separated hierarchy.
-  //    A path's parent is the longest existing path that is a prefix of it.
-  //    e.g. if we have "Layout", "Layout.Content", "Layout.Content.Main.Hero",
-  //    then Hero's parent is Layout.Content (not Layout.Content.Main, which doesn't exist).
-  const childrenOf = new Map<string | null, string[]>();
-
-  // Sort paths by length so parents are processed before children
-  const sortedPaths = [...allPaths].sort((a, b) => a.length - b.length);
-
-  for (const path of sortedPaths) {
-    // Walk up the path segments to find the nearest existing ancestor
-    let parent: string | null = null;
-    let candidate = getParentPath(path);
-    while (candidate !== null) {
-      if (wallStartsByPath.has(candidate)) {
-        parent = candidate;
-        break;
-      }
-      candidate = getParentPath(candidate);
-    }
-
-    const siblings = childrenOf.get(parent) ?? [];
-    siblings.push(path);
-    childrenOf.set(parent, siblings);
-  }
-
-  // Sort each group of siblings by median wall_start_ms
-  for (const [, children] of childrenOf) {
-    children.sort((a, b) => (medianByPath.get(a) ?? 0) - (medianByPath.get(b) ?? 0));
-  }
-
-  // 3. Collect unique queries per boundary
-  const queriesByBoundary = new Map<string, Set<string>>();
-  for (const q of queries) {
-    const set = queriesByBoundary.get(q.boundary_path) ?? new Set();
-    set.add(q.queryName);
-    queriesByBoundary.set(q.boundary_path, set);
-  }
-
-  // 4. Collect unique subgraphs per (boundary, query) — grouped by subgraph, not individual op
-  const subgraphsByBoundaryQuery = new Map<string, Set<string>>();
-  for (const op of subgraphOps) {
-    const key = `${op.boundary_path}:${op.queryName}`;
-    const sgSet = subgraphsByBoundaryQuery.get(key) ?? new Set();
-    sgSet.add(op.subgraphName);
-    subgraphsByBoundaryQuery.set(key, sgSet);
-  }
-
-  // 5. DFS walk the tree to produce correctly ordered items
-  const items: TreeItem[] = [];
-
-  function walk(parentPath: string | null) {
-    const children = childrenOf.get(parentPath) ?? [];
-    for (const boundaryPath of children) {
-      const name = boundaryPath.split(".").pop()!;
-
-      items.push({
-        path: boundaryPath,
-        name,
-        type: "boundary",
-        boundaryPath,
-        lcpCritical: lcpByPath.get(boundaryPath) ?? false,
-        phase: phaseByPath.get(boundaryPath),
-      });
-
-      // Add queries and subgraph ops under this boundary
-      const queryNames = queriesByBoundary.get(boundaryPath);
-      if (queryNames) {
-        let queryIdx = 0;
-        for (const queryName of queryNames) {
-          const queryPath = `${boundaryPath}.query${queryIdx > 0 ? queryIdx : ""}`;
-          items.push({
-            path: queryPath,
-            name: queryName,
-            type: "query",
-            boundaryPath,
-            queryName,
-            phase: phaseByPath.get(boundaryPath),
-          });
-
-          const sgKey = `${boundaryPath}:${queryName}`;
-          const sgs = subgraphsByBoundaryQuery.get(sgKey);
-          if (sgs) {
-            let opIdx = 0;
-            for (const subgraphName of sgs) {
-              items.push({
-                path: `${queryPath}.op${opIdx > 0 ? opIdx : ""}`,
-                name: subgraphName,
-                type: "subgraph-op",
-                boundaryPath,
-                queryName,
-                opName: subgraphName,
-                subgraphName,
-                phase: phaseByPath.get(boundaryPath),
-              });
-              opIdx++;
-            }
-          }
-          queryIdx++;
-        }
-      }
-
-      // Recurse into child boundaries
-      walk(boundaryPath);
-    }
-  }
-
-  walk(null);
-  return items;
-}
-
-const median = medianUtil;
 
 interface TreeNode {
   name: string;
@@ -198,36 +23,23 @@ interface TreeNode {
   depth: number;
   type: "boundary" | "query" | "subgraph-op";
   boundaryPath: string;
-  wallStartPctl: number;
-  fetchPctl: number;
-  renderCostPctl: number;
-  blockedPctl: number;
-  totalPctl: number;
-  slo: number;
+  queryLatencyPctl: number;
+  subgraphLatencyPctl: number;
+  querySlo: number;
+  subgraphSlo: number;
+  weight: number;
   lcpCritical: boolean;
-  cached: boolean;
-  noAwait?: boolean;
+  memoized: boolean;
+  prefetch: boolean;
   subgraphName?: string;
   subgraphColor?: string;
   hasChildren: boolean;
   phase?: "ssr" | "csr";
+  wallStartPctl: number;
+  renderCostPctl: number;
 }
 
-function getDepth(item: TreeItem, depthMap: Map<string, number>): number {
-  if (item.type === "boundary") {
-    return depthMap.get(item.boundaryPath) ?? 0;
-  }
-  // Queries and ops indent one/two levels deeper than their boundary
-  const boundaryDepth = depthMap.get(item.boundaryPath) ?? 0;
-  return item.type === "query" ? boundaryDepth + 1 : boundaryDepth + 2;
-}
-
-export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock }: Props) {
-  // Build tree structure dynamically from recorded metrics (skipped in mock mode)
-  const treeStructure = useMemo(
-    () => mock ? [] : buildTreeFromMetrics(boundaries, queries, subgraphOps),
-    [boundaries, queries, subgraphOps, mock],
-  );
+export function BoundaryTreeTable({ pctl, mock }: Props) {
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [expandedQueries, setExpandedQueries] = useState<Set<string>>(new Set());
@@ -251,213 +63,10 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
     });
   }, []);
 
-  const treeNodes = useMemo(() => {
-    // Mock data path — use pre-computed nodes directly
-    if (mock?.[pctl]?.nodes) return mock[pctl].nodes;
-
-    if (boundaries.length === 0 && queries.length === 0) return [];
-
-    // Group metrics by key
-    const boundaryByPath = new Map<string, BoundaryMetric[]>();
-    for (const b of boundaries) {
-      const list = boundaryByPath.get(b.boundary_path) ?? [];
-      list.push(b);
-      boundaryByPath.set(b.boundary_path, list);
-    }
-
-    const queryByKey = new Map<string, QueryMetric[]>();
-    for (const q of queries) {
-      const key = `${q.boundary_path}:${q.queryName}`;
-      const list = queryByKey.get(key) ?? [];
-      list.push(q);
-      queryByKey.set(key, list);
-    }
-
-    // Compute depth for each boundary based on tree hierarchy
-    const depthMap = new Map<string, number>();
-    const allBoundaryPathsSet = new Set(
-      treeStructure.filter((t) => t.type === "boundary").map((t) => t.boundaryPath),
-    );
-    for (const path of allBoundaryPathsSet) {
-      let depth = 0;
-      let candidate = getParentPath(path);
-      while (candidate !== null) {
-        if (allBoundaryPathsSet.has(candidate)) {
-          depth++;
-        }
-        candidate = getParentPath(candidate);
-      }
-      depthMap.set(path, depth);
-    }
-
-    // Precompute which boundaries have children (queries, ops, or child boundaries)
-    const boundaryHasChildren = new Set<string>();
-    for (const item of treeStructure) {
-      if (item.type !== "boundary") {
-        boundaryHasChildren.add(item.boundaryPath);
-      }
-    }
-    // Also mark boundaries that have child boundaries
-    for (const path of allBoundaryPathsSet) {
-      let candidate = getParentPath(path);
-      while (candidate !== null) {
-        if (allBoundaryPathsSet.has(candidate)) {
-          boundaryHasChildren.add(candidate);
-          break;
-        }
-        candidate = getParentPath(candidate);
-      }
-    }
-
-    // Build lookup of actual query durations from non-cached executions.
-    // Cached queries record duration_ms=0, but we want to show the real cost.
-    const actualQueryDuration = new Map<string, number[]>();
-    for (const q of queries) {
-      if (!q.fullyCached) {
-        const list = actualQueryDuration.get(q.queryName) ?? [];
-        list.push(q.duration_ms);
-        actualQueryDuration.set(q.queryName, list);
-      }
-    }
-    // Same for subgraph ops
-    const actualOpDuration = new Map<string, number[]>();
-    for (const op of subgraphOps) {
-      if (!op.cached) {
-        const key = `${op.queryName}:${op.subgraphName}`;
-        const list = actualOpDuration.get(key) ?? [];
-        list.push(op.duration_ms);
-        actualOpDuration.set(key, list);
-      }
-    }
-
-    const nodes: TreeNode[] = [];
-
-    for (const item of treeStructure) {
-      const depth = getDepth(item, depthMap);
-
-      if (item.type === "boundary") {
-        const metrics = boundaryByPath.get(item.boundaryPath) ?? [];
-        const wallStarts = metrics.map((m) => m.wall_start_ms);
-        const durations = metrics.map((m) => m.render_duration_ms);
-        const fetchDurations = metrics.map((m) => m.fetch_duration_ms ?? m.render_duration_ms);
-        const renderCosts = metrics.map((m) => m.render_cost_ms ?? 0);
-
-        nodes.push({
-          name: item.name,
-          path: item.path,
-          depth,
-          type: "boundary",
-          boundaryPath: item.boundaryPath,
-          wallStartPctl: percentile(wallStarts, pctl),
-          fetchPctl: percentile(fetchDurations, pctl),
-          renderCostPctl: percentile(renderCosts, pctl),
-          blockedPctl: 0,
-          totalPctl: percentile(durations, pctl),
-          slo: 0,
-          lcpCritical: item.lcpCritical ?? false,
-          cached: false,
-          hasChildren: boundaryHasChildren.has(item.boundaryPath),
-          phase: item.phase,
-        });
-      } else if (item.type === "query") {
-        const key = `${item.boundaryPath}:${item.queryName}`;
-        const metrics = queryByKey.get(key) ?? [];
-        const durations = metrics.map((m) => m.duration_ms);
-        const isCached = metrics.length > 0 && metrics.every((m) => m.fullyCached);
-        // Cached queries record duration_ms=0; use actual duration from the
-        // non-cached execution of the same query so users see the real cost.
-        const sourceDurations = isCached
-          ? (actualQueryDuration.get(item.queryName!) ?? durations)
-          : durations;
-        const queryDurationPctl = percentile(sourceDurations, pctl);
-
-        nodes.push({
-          name: item.queryName!,
-          path: item.path,
-          depth,
-          type: "query",
-          boundaryPath: item.boundaryPath,
-          wallStartPctl: 0,
-          fetchPctl: queryDurationPctl,
-          renderCostPctl: 0,
-          blockedPctl: 0,
-          totalPctl: queryDurationPctl,
-          slo: 0,
-          lcpCritical: false,
-          cached: isCached,
-          hasChildren: false,
-          phase: item.phase,
-        });
-      } else {
-        // Group ops by subgraph — aggregate all ops for this subgraph under this query
-        const sgName = item.subgraphName;
-        const sgSlo = sgName
-          ? SUBGRAPHS[sgName as SubgraphName]?.sloMs ?? 0
-          : 0;
-        // Collect all ops for this subgraph under this boundary+query
-        const matchingOps: SubgraphOperationMetric[] = [];
-        for (const op of subgraphOps) {
-          if (op.boundary_path === item.boundaryPath && op.queryName === item.queryName && op.subgraphName === sgName) {
-            matchingOps.push(op);
-          }
-        }
-        const durations = matchingOps.map((m) => m.duration_ms);
-        const isCached = matchingOps.length > 0 && matchingOps.every((m) => m.cached);
-        const subgraphColor = sgName
-          ? SUBGRAPHS[sgName as SubgraphName]?.color
-          : undefined;
-
-        // Cached ops record duration_ms=0; use actual duration from the
-        // non-cached execution so users see the real cost.
-        const sourceDurations = isCached
-          ? (actualOpDuration.get(`${item.queryName}:${sgName}`) ?? durations)
-          : durations;
-        const durationPctl = percentile(sourceDurations, pctl);
-        nodes.push({
-          name: sgName || item.opName!,
-          path: item.path,
-          depth,
-          type: "subgraph-op",
-          boundaryPath: item.boundaryPath,
-          wallStartPctl: 0,
-          fetchPctl: durationPctl,
-          renderCostPctl: 0,
-          blockedPctl: 0,
-          totalPctl: durationPctl,
-          slo: sgSlo,
-          lcpCritical: false,
-          cached: isCached,
-          subgraphName: item.subgraphName,
-          subgraphColor,
-          hasChildren: false,
-          phase: item.phase,
-        });
-      }
-    }
-
-    // Thread simulation for blocked_ms — uses real percentile fetch durations
-    const boundaryNodes = nodes.filter(
-      (n) => n.type === "boundary" && n.renderCostPctl > 0
-    );
-    const sorted = [...boundaryNodes].sort((a, b) => {
-      const aEnd = a.wallStartPctl + a.fetchPctl;
-      const bEnd = b.wallStartPctl + b.fetchPctl;
-      return aEnd - bEnd;
-    });
-    let threadCursor = 0;
-    for (const bn of sorted) {
-      const fetchEnd = bn.wallStartPctl + bn.fetchPctl;
-      const renderStart = Math.max(threadCursor, fetchEnd);
-      const blocked = renderStart - fetchEnd;
-      const nodeIdx = nodes.findIndex((n) => n.path === bn.path);
-      if (nodeIdx >= 0) {
-        nodes[nodeIdx].blockedPctl = Math.max(0, Math.round(blocked));
-      }
-      threadCursor = renderStart + bn.renderCostPctl;
-    }
-
-    return nodes;
-  }, [treeStructure, boundaries, queries, subgraphOps, pctl, mock]);
+  const treeNodes = useMemo(
+    () => mock?.[pctl]?.nodes ?? [],
+    [pctl, mock],
+  );
 
   // LCP filter toggle — clears subgraph/focus when activated
   const [lcpFilter, setLcpFilter] = useState(false);
@@ -576,18 +185,10 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
   }, [selectedSubgraphs, lcpFilter, lcpBoundaryPaths, focusPath, treeNodes]);
 
   // Call count summary stats (uncached = actual network calls)
-  const callSummary = useMemo(() => {
-    if (mock?.[pctl]?.callSummary !== undefined) return mock[pctl].callSummary;
-    if (subgraphOps.length === 0) return null;
-    const requestIds = new Set(subgraphOps.map((o) => o.requestId));
-    const numRequests = requestIds.size;
-    const uncachedOps = subgraphOps.filter((o) => !o.cached).length;
-    const cachedOps = subgraphOps.filter((o) => o.cached).length;
-    return {
-      callsPerReq: Math.round((uncachedOps / numRequests) * 10) / 10,
-      dedupedPerReq: Math.round((cachedOps / numRequests) * 10) / 10,
-    };
-  }, [subgraphOps, pctl, mock]);
+  const callSummary = useMemo(
+    () => mock?.[pctl]?.callSummary ?? null,
+    [pctl, mock],
+  );
 
   // Derive boundary paths from computed tree nodes (works for both live and mock)
   const allBoundaryPaths = useMemo(
@@ -621,7 +222,7 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
     // Group uncached subgraph-ops by parent query path
     const opsByQuery = new Map<string, typeof treeNodes>();
     for (const n of treeNodes) {
-      if (n.type !== "subgraph-op" || n.cached) continue;
+      if (n.type !== "subgraph-op" || n.memoized) continue;
       const queryNode = treeNodes.find(
         (q) => q.type === "query" && q.boundaryPath === n.boundaryPath && n.path.startsWith(q.path + "."),
       );
@@ -636,10 +237,10 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
       let hasMissing = false;
       let worstStatus: "ok" | "warn" | "exceeded" | "none" = "none";
       for (const op of ops) {
-        if (op.slo > 0) {
+        if (op.subgraphSlo > 0) {
           hasSome = true;
-          if (op.slo > maxSlo) maxSlo = op.slo;
-          const ratio = op.fetchPctl / op.slo;
+          if (op.subgraphSlo > maxSlo) maxSlo = op.subgraphSlo;
+          const ratio = op.subgraphLatencyPctl / op.subgraphSlo;
           if (ratio > 1 && worstStatus !== "exceeded") worstStatus = "exceeded";
           else if (ratio > 0.8 && worstStatus !== "exceeded") worstStatus = "warn";
           else if (worstStatus === "none") worstStatus = "ok";
@@ -891,42 +492,27 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
       <table className="w-full text-sm font-mono table-fixed" style={{ minWidth: "700px" }}>
         <thead>
           <tr className="text-zinc-500 text-xs border-b border-zinc-800">
-            <th className="text-left py-2 px-2 font-normal" style={{ width: "30%" }}>
+            <th className="text-left py-2 px-2 font-normal" style={{ width: "35%" }}>
               Boundary / Query / Subgraph
             </th>
-            <th className="text-right py-2 px-2 font-normal" style={{ width: "9%" }}>
-              Wall Start
+            <th className="text-right py-2 px-2 font-normal" style={{ width: "13%" }}>
+              Query Latency
               <br />
               <span className="text-zinc-600">{pLabel}</span>
             </th>
-            <th className="text-right py-2 px-2 font-normal" style={{ width: "9%" }}>
-              Fetch
+            <th className="text-right py-2 px-2 font-normal" style={{ width: "13%" }}>
+              Subgraph Latency
               <br />
               <span className="text-zinc-600">{pLabel}</span>
             </th>
-            <th className="text-right py-2 px-2 font-normal" style={{ width: "9%" }}>
-              Render
-              <br />
-              <span className="text-zinc-600">{pLabel}</span>
-            </th>
-            <th className="text-right py-2 px-2 font-normal" style={{ width: "9%" }}>
-              Blocked
-              <br />
-              <span className="text-zinc-600">{pLabel}</span>
-            </th>
-            <th className="text-right py-2 px-2 font-normal" style={{ width: "9%" }}>
-              Total
-              <br />
-              <span className="text-zinc-600">{pLabel}</span>
-            </th>
-            <th className="text-right py-2 px-2 font-normal" style={{ width: "8%" }}>SLO</th>
-            <th className="text-center py-2 px-2 font-normal" style={{ width: "7%" }}>Status</th>
+            <th className="text-right py-2 px-2 font-normal" style={{ width: "12%" }}>SLO</th>
+            <th className="text-center py-2 px-2 font-normal" style={{ width: "10%" }}>Status</th>
           </tr>
         </thead>
         <tbody>
           {visibleNodes.length === 0 && (
             <tr>
-              <td colSpan={8} className="text-center py-8 text-zinc-500">
+              <td colSpan={5} className="text-center py-8 text-zinc-500">
                 <p>No results match the current filters.</p>
                 <button
                   onClick={() => { clearSubgraphFilter(); setLcpFilter(false); setFocusPath(null); }}
@@ -939,38 +525,30 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
           )}
           {visibleNodes.map((node) => {
             const isSubgraphOp = node.type === "subgraph-op";
-            const hasSlo = isSubgraphOp && node.slo > 0;
-            const noSlo = isSubgraphOp && !hasSlo && !node.cached;
-            const sloRatio = hasSlo && !node.cached ? node.fetchPctl / node.slo : 0;
-            const statusColor =
-              !isSubgraphOp || node.cached
-                ? "text-zinc-600"
-                : noSlo
-                  ? "text-amber-500"
-                  : sloRatio > 1
-                    ? "text-red-400"
-                    : sloRatio > 0.8
-                      ? "text-yellow-400"
-                      : "text-green-400";
-            const statusIcon =
-              !isSubgraphOp
-                ? ""
-                : node.cached
-                  ? "\u2014"
-                  : noSlo
-                    ? "?"
-                    : sloRatio > 1
-                      ? "!!!"
-                      : sloRatio > 0.8
-                        ? "!!"
-                        : "OK";
+            const isQuery = node.type === "query";
 
-            const blockedHighlight =
-              node.blockedPctl > 0 && node.lcpCritical
-                ? "text-amber-400 font-medium"
-                : node.blockedPctl > 0
-                  ? "text-yellow-500/70"
+            // SLO/status for subgraph-op rows
+            const sgHasSlo = isSubgraphOp && node.subgraphSlo > 0;
+            const sgNoSlo = isSubgraphOp && !sgHasSlo && !node.memoized;
+            const sgSloRatio = sgHasSlo && !node.memoized ? node.subgraphLatencyPctl / node.subgraphSlo : 0;
+
+            // SLO/status for query rows
+            const qHasSlo = isQuery && node.querySlo > 0;
+            const qNoSlo = isQuery && !qHasSlo && !node.memoized;
+            const qSloRatio = qHasSlo && !node.memoized ? node.queryLatencyPctl / node.querySlo : 0;
+
+            const statusColor =
+              isSubgraphOp
+                ? (node.memoized ? "text-zinc-600" : sgNoSlo ? "text-amber-500" : sgSloRatio > 1 ? "text-red-400" : sgSloRatio > 0.8 ? "text-yellow-400" : "text-green-400")
+                : isQuery
+                  ? (node.memoized ? "text-zinc-600" : qNoSlo ? "text-amber-500" : qSloRatio > 1 ? "text-red-400" : qSloRatio > 0.8 ? "text-yellow-400" : "text-green-400")
                   : "text-zinc-600";
+            const statusIcon =
+              isSubgraphOp
+                ? (node.memoized ? "\u2014" : sgNoSlo ? "?" : sgSloRatio > 1 ? "!!!" : sgSloRatio > 0.8 ? "!!" : "OK")
+                : isQuery
+                  ? (node.memoized ? "\u2014" : qNoSlo ? "?" : qSloRatio > 1 ? "!!!" : qSloRatio > 0.8 ? "!!" : "OK")
+                  : "";
 
             const isExpanded = node.type === "boundary" && expanded.has(node.boundaryPath);
             const isQueryExpanded = node.type === "query" && expandedQueries.has(node.path) && queryHasChildren.has(node.path);
@@ -1015,7 +593,7 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
                       <span className="w-4 mr-1 flex-shrink-0" />
                     ) : null}
                     {node.type === "subgraph-op" ? (
-                      <span className={`flex items-center gap-1.5 min-w-0 ${node.cached ? "opacity-50" : ""}`}>
+                      <span className={`flex items-center gap-1.5 min-w-0 ${node.memoized ? "opacity-50" : ""}`}>
                         {(node.subgraphName || node.subgraphColor) && (
                           <span
                             className="w-2 h-2 rounded-full flex-shrink-0"
@@ -1025,12 +603,12 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
                         <Tooltip content={node.name} className="min-w-0">
                           <span className="text-zinc-400 truncate block">{node.name.replace("-subgraph", "")}</span>
                         </Tooltip>
-                        {node.cached && (
+                        {node.memoized && (
                           <span className="text-xs text-cyan-600 font-medium flex-shrink-0">memoized</span>
                         )}
                       </span>
                     ) : node.type === "query" ? (
-                      <span className={`flex items-center min-w-0 ${node.cached || node.noAwait ? "opacity-50" : ""}`}>
+                      <span className={`flex items-center min-w-0 ${node.memoized || node.prefetch ? "opacity-50" : ""}`}>
                         {queryHasChildren.has(node.path) ? (
                           <button
                             onClick={(e) => { e.stopPropagation(); toggleQueryExpand(node.path); }}
@@ -1045,10 +623,10 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
                         <Tooltip content={node.name} className="min-w-0">
                           <span className="text-teal-400 truncate block">{node.name}</span>
                         </Tooltip>
-                        {node.noAwait && (
+                        {node.prefetch && (
                           <span className="text-xs text-orange-500 font-medium ml-1.5 flex-shrink-0">prefetch</span>
                         )}
-                        {node.cached && !node.noAwait && (
+                        {node.memoized && !node.prefetch && (
                           <span className="text-xs text-cyan-600 font-medium ml-1.5 flex-shrink-0">memoized</span>
                         )}
                       </span>
@@ -1090,56 +668,53 @@ export function BoundaryTreeTable({ boundaries, queries, subgraphOps, pctl, mock
                     )}
                   </div>
                 </td>
-                <td className="text-right py-1.5 px-2 text-zinc-400">
-                  {node.type === "boundary" ? `${node.wallStartPctl}ms` : ""}
+                {/* Query Latency column */}
+                <td className={`text-right py-1.5 px-2 ${node.memoized || node.prefetch ? "text-zinc-700" : "text-zinc-300"}`}>
+                  {isSubgraphOp
+                    ? node.memoized
+                      ? <span className="opacity-50">{Math.round(node.queryLatencyPctl)}ms ({node.weight})</span>
+                      : `${Math.round(node.queryLatencyPctl)}ms (${node.weight})`
+                    : node.prefetch
+                      ? <span className="opacity-50">{node.queryLatencyPctl}ms</span>
+                      : node.memoized
+                        ? <span className="opacity-60">{node.queryLatencyPctl}ms</span>
+                        : `${node.queryLatencyPctl}ms`}
                 </td>
-                <td className={`text-right py-1.5 px-2 ${node.cached || node.noAwait ? "text-zinc-700" : "text-zinc-300"}`}>
-                  {node.noAwait
-                    ? <span className="opacity-50">{node.fetchPctl}ms</span>
-                    : node.cached
-                      ? <span className="opacity-60">{node.fetchPctl}ms</span>
-                      : `${node.fetchPctl}ms`}
+                {/* Subgraph Latency column */}
+                <td className={`text-right py-1.5 px-2 ${node.memoized ? "text-zinc-700" : "text-zinc-300"}`}>
+                  {isSubgraphOp && node.subgraphLatencyPctl > 0
+                    ? `${node.subgraphLatencyPctl}ms`
+                    : isSubgraphOp ? "\u2014" : ""}
                 </td>
-                <td className="text-right py-1.5 px-2 text-zinc-300">
-                  {node.type === "boundary" ? `${node.renderCostPctl}ms` : ""}
-                </td>
-                <td className={`text-right py-1.5 px-2 ${blockedHighlight}`}>
-                  {node.type === "boundary"
-                    ? node.blockedPctl > 0
-                      ? `${node.blockedPctl}ms`
-                      : "\u2014"
-                    : ""}
-                </td>
-                <td className={`text-right py-1.5 px-2 ${node.cached || node.noAwait ? "text-zinc-700" : "text-zinc-300"}`}>
-                  {node.type === "boundary"
-                    ? `${node.totalPctl}ms`
-                    : node.noAwait
-                      ? <span className="opacity-50">{node.fetchPctl}ms</span>
-                      : node.cached
-                        ? <span className="opacity-60">{node.fetchPctl}ms</span>
-                        : `${node.fetchPctl}ms`}
-                </td>
+                {/* SLO column */}
                 <td className={`text-right py-1.5 px-2 ${
-                  isSubgraphOp && !node.cached
-                    ? noSlo ? "text-amber-500/70 italic" : "text-zinc-500"
-                    : node.type === "query" && querySloSummary.has(node.path)
-                      ? querySloSummary.get(node.path)!.sloClass
-                      : "text-zinc-500"
+                  isSubgraphOp && !node.memoized
+                    ? sgNoSlo ? "text-amber-500/70 italic" : "text-zinc-500"
+                    : isQuery && !node.memoized
+                      ? qNoSlo ? "text-amber-500/70 italic" : "text-zinc-500"
+                      : node.type === "boundary" && querySloSummary.has(node.path)
+                        ? querySloSummary.get(node.path)!.sloClass
+                        : "text-zinc-500"
                 }`}>
-                  {isSubgraphOp && !node.cached
-                    ? hasSlo
-                      ? `${node.slo}ms`
+                  {isSubgraphOp && !node.memoized
+                    ? sgHasSlo
+                      ? `${node.subgraphSlo}ms`
                       : "none"
-                    : node.type === "query" && querySloSummary.has(node.path)
-                      ? querySloSummary.get(node.path)!.sloLabel
-                      : ""}
+                    : isQuery && !node.memoized
+                      ? qHasSlo
+                        ? `${node.querySlo}ms`
+                        : "none"
+                      : node.type === "boundary" && querySloSummary.has(node.path)
+                        ? querySloSummary.get(node.path)!.sloLabel
+                        : ""}
                 </td>
+                {/* Status column */}
                 <td className={`text-center py-1.5 px-2 ${
-                  node.type === "query" && querySloSummary.has(node.path)
+                  node.type === "boundary" && querySloSummary.has(node.path)
                     ? querySloSummary.get(node.path)!.statusColor
                     : statusColor
                 }`}>
-                  {node.type === "query" && querySloSummary.has(node.path)
+                  {node.type === "boundary" && querySloSummary.has(node.path)
                     ? querySloSummary.get(node.path)!.statusIcon
                     : statusIcon}
                 </td>

@@ -1,8 +1,6 @@
 "use client";
 
 import { useMemo, useState, useCallback } from "react";
-import type { BoundaryMetric, QueryMetric } from "@/lib/metrics-store";
-import type { LoAFEntry, NavigationTiming } from "@/lib/client-metrics-store";
 import type { MockWaterfallData } from "@/lib/mock-metrics";
 import {
   filterLoafsByCsrCutoff,
@@ -14,14 +12,9 @@ import { Tooltip, TooltipContent } from "./Tooltip";
 import type { TooltipLine } from "./Tooltip";
 
 interface Props {
-  boundaries: BoundaryMetric[];
-  queries: QueryMetric[];
   pctl: number;
-  hydrationTimes?: Record<string, number>;
-  loafEntries?: Record<string, LoAFEntry[]>;
-  navigationTimings?: Record<string, NavigationTiming>;
-  /** Pre-computed mock data keyed by percentile (bypasses live aggregation) */
-  mock?: Record<number, MockWaterfallData>;
+  /** Pre-computed data keyed by percentile (from YAML or live conversion) */
+  mock: Record<number, MockWaterfallData>;
 }
 
 interface BoundaryTiming {
@@ -35,7 +28,7 @@ interface BoundaryTiming {
   lcpCritical: boolean;
   queryName: string;
   queryNames: string[];
-  cached: boolean;
+  memoized: boolean;
   subgraphColor?: string;
   prefetchQueries?: string[];
 }
@@ -62,104 +55,23 @@ const BOUNDARY_COLORS: Record<string, string> = {
 };
 
 export function CriticalInitPath({
-  boundaries,
-  queries,
   pctl,
-  hydrationTimes,
-  loafEntries,
-  navigationTimings,
   mock,
 }: Props) {
   const [timelineScope, setTimelineScope] = useState<"lcp" | "ssr" | "full">(
     "full",
   );
-  // Separate SSR and CSR metrics
-  const ssrBoundaries = useMemo(
-    () => boundaries.filter((b) => b.phase !== "csr"),
-    [boundaries],
+
+  const hydrationMs = useMemo(() => mock?.[pctl]?.hydrationMs ?? 0, [pctl, mock]);
+  const initializationMs = useMemo(() => mock?.[pctl]?.initializationMs ?? 0, [pctl, mock]);
+  const networkOffsetMs = useMemo(() => mock?.[pctl]?.networkOffsetMs ?? 20, [pctl, mock]);
+  const lcpImageLatencyMs = useMemo(() => mock?.[pctl]?.lcpImageLatencyMs ?? 80, [pctl, mock]);
+  const aggregatedLoaf = useMemo(() => mock?.[pctl]?.loafEntries ?? [], [pctl, mock]);
+
+  const navTiming = useMemo(
+    () => mock?.[pctl]?.navigationTiming ?? null,
+    [pctl, mock],
   );
-  const csrBoundaries = useMemo(
-    () => boundaries.filter((b) => b.phase === "csr"),
-    [boundaries],
-  );
-  const ssrQueries = useMemo(
-    () => queries.filter((q) => q.phase !== "csr"),
-    [queries],
-  );
-  const csrQueries = useMemo(
-    () => queries.filter((q) => q.phase === "csr"),
-    [queries],
-  );
-
-  // Pick a representative page load at the selected experience percentile.
-  // Instead of computing percentile per-boundary independently (which creates
-  // a Frankenstein load where everything is at its worst simultaneously),
-  // we rank actual page loads by total time and pick a coherent one.
-  const representativeRequestId = useMemo(() => {
-    if (mock?.[pctl]) return null; // mock mode — no need for representative load
-    if (ssrBoundaries.length === 0) return null;
-
-    const byRequest = new Map<string, BoundaryMetric[]>();
-    for (const b of ssrBoundaries) {
-      const list = byRequest.get(b.requestId) ?? [];
-      list.push(b);
-      byRequest.set(b.requestId, list);
-    }
-
-    const loadTimes: { requestId: string; pageTime: number }[] = [];
-    for (const [requestId, metrics] of byRequest) {
-      const pageTime = Math.max(
-        ...metrics.map((m) => m.wall_start_ms + m.render_duration_ms),
-      );
-      loadTimes.push({ requestId, pageTime });
-    }
-    loadTimes.sort((a, b) => a.pageTime - b.pageTime);
-
-    const idx = Math.min(
-      Math.max(0, Math.ceil((pctl / 100) * loadTimes.length) - 1),
-      loadTimes.length - 1,
-    );
-    return loadTimes[idx]?.requestId ?? null;
-  }, [ssrBoundaries, pctl, mock]);
-
-  // Hydration time — from mock or representative load
-  const hydrationMs = useMemo(() => {
-    if (mock?.[pctl]) return mock[pctl].hydrationMs ?? 0;
-    if (!hydrationTimes || !representativeRequestId) return 0;
-    return hydrationTimes[representativeRequestId] ?? 0;
-  }, [hydrationTimes, representativeRequestId, pctl, mock]);
-
-  // Initialization time (hydration + client-side effects) — from mock data
-  const initializationMs = useMemo(() => {
-    if (mock?.[pctl]) return mock[pctl].initializationMs ?? 0;
-    return 0;
-  }, [pctl, mock]);
-
-  // Network offset — edge/network overhead before server processing
-  const networkOffsetMs = useMemo(() => {
-    if (mock?.[pctl]) return mock[pctl].networkOffsetMs ?? 20;
-    return 20;
-  }, [pctl, mock]);
-
-  // LCP image latency — browser download + decode + paint after HTML streams
-  const lcpImageLatencyMs = useMemo(() => {
-    if (mock?.[pctl]) return mock[pctl].lcpImageLatencyMs ?? 80;
-    return 80;
-  }, [pctl, mock]);
-
-  // LoAF entries — from mock or representative load
-  const aggregatedLoaf = useMemo(() => {
-    if (mock?.[pctl]) return mock[pctl].loafEntries ?? [];
-    if (!loafEntries || !representativeRequestId) return [];
-    return loafEntries[representativeRequestId] ?? [];
-  }, [loafEntries, representativeRequestId, pctl, mock]);
-
-  // Navigation timing — from mock or representative load
-  const navTiming = useMemo(() => {
-    if (mock?.[pctl]) return mock[pctl].navigationTiming ?? null;
-    if (!navigationTimings || !representativeRequestId) return null;
-    return navigationTimings[representativeRequestId] ?? null;
-  }, [navigationTimings, representativeRequestId, pctl, mock]);
 
   const {
     timings,
@@ -178,69 +90,10 @@ export function CriticalInitPath({
       shellEnd: 0,
     };
 
-    // Mock data path — use pre-computed timings
     const mockData = mock?.[pctl];
-    let rawTimings: BoundaryTiming[] | null = mockData
-      ? mockData.ssrTimings.map((t) => ({ ...t }))
-      : null;
+    if (!mockData) return emptyResult;
 
-    // Live data path — build from representative load
-    if (!rawTimings) {
-      if (!representativeRequestId) return emptyResult;
-
-      const repBoundaries = ssrBoundaries.filter(
-        (b) => b.requestId === representativeRequestId,
-      );
-      const repQueries = ssrQueries.filter(
-        (q) => q.requestId === representativeRequestId,
-      );
-      if (repBoundaries.length === 0) return emptyResult;
-
-      const queryNamesByPath = new Map<string, string[]>();
-      const queryByKey = new Map<string, QueryMetric[]>();
-      for (const q of repQueries) {
-        const names = queryNamesByPath.get(q.boundary_path) ?? [];
-        if (!names.includes(q.queryName)) names.push(q.queryName);
-        queryNamesByPath.set(q.boundary_path, names);
-        const key = `${q.boundary_path}:${q.queryName}`;
-        const list = queryByKey.get(key) ?? [];
-        list.push(q);
-        queryByKey.set(key, list);
-      }
-
-      rawTimings = repBoundaries
-        .sort((a, b) => a.wall_start_ms - b.wall_start_ms)
-        .map((m) => {
-          const name = m.boundary_path.split(".").pop()!;
-          const queryNames = queryNamesByPath.get(m.boundary_path) ?? [];
-          const queryName = queryNames[0] ?? "";
-
-          // Check if ALL queries for this boundary are fully cached
-          const allQMetrics = queryNames.flatMap(
-            (qn) => queryByKey.get(`${m.boundary_path}:${qn}`) ?? [],
-          );
-          const isCached =
-            allQMetrics.length > 0 && allQMetrics.every((q) => q.fullyCached);
-
-          return {
-            name,
-            boundaryPath: m.boundary_path,
-            wallStart: m.wall_start_ms,
-            fetchDuration: isCached
-              ? 0
-              : (m.fetch_duration_ms ?? m.render_duration_ms),
-            renderCost: m.render_cost_ms ?? 0,
-            blocked: 0,
-            total: m.render_duration_ms,
-            lcpCritical: m.is_lcp_critical,
-            queryName,
-            queryNames,
-            cached: isCached,
-          };
-        });
-    }
-
-    const timings = rawTimings!;
+    const timings: BoundaryTiming[] = mockData.ssrTimings.map((t) => ({ ...t }));
 
     // Thread simulation for blocked_ms
     const sortedByFetchEnd = [...timings]
@@ -263,8 +116,7 @@ export function CriticalInitPath({
       ? layout.wallStart + layout.fetchDuration + layout.renderCost
       : 0;
 
-    // LCP boundary — use the last lcpCritical boundary (the actual LCP element,
-    // not its ancestors which may also be marked critical)
+    // LCP boundary — use the last lcpCritical boundary
     const lcpCriticalTimings = timings.filter((t) => t.lcpCritical);
     const lcpBoundary =
       lcpCriticalTimings.length > 0
@@ -282,59 +134,13 @@ export function CriticalInitPath({
     const lcpBlocked = lcpBoundary?.blocked ?? 0;
     const lcpDisplayed = lcpRendered > 0 ? lcpRendered + lcpImageLatencyMs : 0;
 
-    return {
-      timings,
-      lcpDataReady,
-      lcpRendered,
-      lcpBlocked,
-      lcpDisplayed,
-      shellEnd,
-    };
-  }, [
-    ssrBoundaries,
-    ssrQueries,
-    representativeRequestId,
-    pctl,
-    mock,
-    lcpImageLatencyMs,
-  ]);
+    return { timings, lcpDataReady, lcpRendered, lcpBlocked, lcpDisplayed, shellEnd };
+  }, [pctl, mock, lcpImageLatencyMs]);
 
-  // Compute CSR query timings for visualization
-  const csrTimings = useMemo(() => {
-    // Mock data path
-    if (mock?.[pctl]?.csrTimings) return mock[pctl].csrTimings;
-
-    if (csrBoundaries.length === 0 || !representativeRequestId) return [];
-
-    // Filter to representative load
-    const repCsr = csrBoundaries.filter(
-      (b) => b.requestId === representativeRequestId,
-    );
-    const repCsrQueries = csrQueries.filter(
-      (q) => q.requestId === representativeRequestId,
-    );
-
-    const csrQueryNamesByPath = new Map<string, string[]>();
-    for (const q of repCsrQueries) {
-      const names = csrQueryNamesByPath.get(q.boundary_path) ?? [];
-      if (!names.includes(q.queryName)) names.push(q.queryName);
-      csrQueryNamesByPath.set(q.boundary_path, names);
-    }
-
-    return repCsr
-      .sort((a, b) => a.wall_start_ms - b.wall_start_ms)
-      .map((m) => {
-        const queryNames = csrQueryNamesByPath.get(m.boundary_path) ?? [];
-        return {
-          name: m.boundary_path.split(".").pop()!,
-          boundaryPath: m.boundary_path,
-          wallStart: m.wall_start_ms,
-          fetchDuration: m.fetch_duration_ms ?? m.render_duration_ms,
-          queryName: queryNames[0] ?? "",
-          queryNames,
-        };
-      });
-  }, [csrBoundaries, csrQueries, representativeRequestId, pctl, mock]);
+  const csrTimings = useMemo(
+    () => mock?.[pctl]?.csrTimings ?? [],
+    [pctl, mock],
+  );
 
   // CSR init complete time (latest CSR query end)
   const csrInitComplete = useMemo(() => {
@@ -644,7 +450,7 @@ export function CriticalInitPath({
                   const leftPct = (t.wallStart / maxMs) * 100;
                   const widthPct = Math.max(
                     (t.fetchDuration / maxMs) * 100,
-                    t.cached ? 0.8 : 1.5,
+                    t.memoized ? 0.8 : 1.5,
                   );
                   const color =
                     t.subgraphColor ??
@@ -671,7 +477,7 @@ export function CriticalInitPath({
                         },
                       ]
                     : [];
-                  const tooltipLines: TooltipLine[] = t.cached
+                  const tooltipLines: TooltipLine[] = t.memoized
                     ? [
                         {
                           label: t.queryNames.length > 1 ? "Queries" : "Query",
@@ -730,20 +536,20 @@ export function CriticalInitPath({
                         {/* Query bar (outer) */}
                         <div
                           className={`absolute top-0 h-full rounded flex items-center overflow-hidden cursor-default ${
-                            t.cached
+                            t.memoized
                               ? "opacity-40 border border-dashed border-zinc-600"
                               : ""
                           }`}
                           style={{
                             left: `${leftPct}%`,
                             width: `${widthPct}%`,
-                            backgroundColor: t.cached ? "transparent" : color,
+                            backgroundColor: t.memoized ? "transparent" : color,
                             opacity: t.lcpCritical ? 1 : 0.7,
                           }}
                         >
                           <span className="text-xs text-white px-1.5 truncate font-mono">
                             {t.name}{" "}
-                            {t.cached
+                            {t.memoized
                               ? "(memoized)"
                               : t.queryNames.length > 1
                                 ? `(${t.queryNames.length} queries, ${t.fetchDuration}ms)`

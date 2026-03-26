@@ -1,12 +1,10 @@
 # Example PDP page — with per-percentile timing profiles
 # Import this file into the dashboard via "Import YAML" to visualize.
 #
-# Values can be:
-#   - A plain number (same at all percentiles)
-#   - A map like { p50: 30, p90: 45, p99: 80 } for per-percentile values
-#     (missing percentiles interpolate from nearest lower or fall back to p50)
-#
-# Operations are keyed by subgraph name (e.g. "product-subgraph").
+# Top-level `queries:` defines each GraphQL query with its latency profile
+# and subgraph operation weights. `subgraphs:` defines service-level latency.
+# Boundaries reference queries by name — weights are proportional (0–1),
+# not absolute durations.
 #
 # The waterfall "fudges" fetch times: only the highest-variance boundary
 # uses the experience percentile; others stay near p50. Tree and subgraph
@@ -14,24 +12,109 @@
 
 route: /products/[sku]
 
+queries:
+  getExperimentContext:
+    slo: 60
+    latency: { p50: 28, p75: 32, p90: 35, p95: 42, p99: 50 }
+    ops:
+      experimentation-subgraph: 1.0
+  getProductInfo:
+    slo: 80
+    latency: { p50: 30, p75: 38, p90: 45, p95: 55, p99: 65 }
+    ops:
+      product-subgraph: 1.0
+  getNavigation:
+    slo: 150
+    latency: { p50: 55, p75: 65, p90: 80, p95: 100, p99: 120 }
+    ops:
+      cms-subgraph: 1.0
+  getUserCart:
+    slo: 150
+    latency: { p50: 50, p75: 60, p90: 80, p95: 105, p99: 130 }
+    ops:
+      user-subgraph: 1.0
+  getContentLayout:
+    slo: 100
+    latency: { p50: 40, p75: 48, p90: 60, p95: 72, p99: 85 }
+    ops:
+      cms-subgraph: 1.0
+  getBreadcrumbs:
+    slo: 100
+    latency: { p50: 35, p75: 40, p90: 50, p95: 62, p99: 75 }
+    ops:
+      cms-subgraph: 1.0
+  getHeroImage:
+    slo: 70
+    latency: { p50: 30, p75: 33, p90: 38, p95: 46, p99: 55 }
+    ops:
+      media-subgraph: 1.0
+  getUserFavorites:
+    slo: 120
+    latency: { p50: 40, p75: 48, p90: 60, p95: 78, p99: 95 }
+    ops:
+      user-subgraph: 1.0
+  getThumbnails:
+    slo: 90
+    latency: { p50: 40, p75: 46, p90: 55, p95: 62, p99: 70 }
+    ops:
+      media-subgraph: 1.0
+  getProductPricing:
+    slo: 500
+    latency: { p50: 200, p75: 260, p90: 350, p95: 500, p99: 680 }
+    ops:
+      pricing-subgraph: 0.85
+      inventory-subgraph: 0.15
+      reviews-subgraph: 0.10
+  getRecommendations:
+    slo: 350
+    latency: { p50: 120, p75: 145, p90: 180, p95: 240, p99: 310 }
+    ops:
+      reco-subgraph: 0.70
+      product-subgraph: 0.20
+      pricing-subgraph: 0.10
+  getReviews:
+    slo: 560
+    latency: { p50: 200, p75: 260, p90: 350, p95: 500, p99: 680 }
+    ops:
+      reviews-subgraph: 1.0
+  getReviewsQA:
+    slo: 400
+    latency: { p50: 120, p75: 150, p90: 200, p95: 275, p99: 350 }
+    ops:
+      reviews-subgraph: 1.0
+  getFooter:
+    slo: 80
+    latency: { p50: 30, p75: 36, p90: 45, p95: 52, p99: 60 }
+    ops:
+      cms-subgraph: 1.0
+
 subgraphs:
   product-subgraph:
     slo: 100
+    latency: { p75: 35, p90: 50, p95: 70, p99: 90 }
   pricing-subgraph:
     slo: 500
+    latency: { p75: 180, p90: 300, p95: 450, p99: 620 }
   inventory-subgraph:
+    latency: { p75: 30, p90: 40, p95: 50, p99: 58 }
   reviews-subgraph:
     slo: 560
+    latency: { p75: 220, p90: 320, p95: 460, p99: 650 }
   cms-subgraph:
     slo: 150
+    latency: { p75: 45, p90: 65, p95: 85, p99: 110 }
   reco-subgraph:
     slo: 290
+    latency: { p75: 100, p90: 150, p95: 200, p99: 270 }
   experimentation-subgraph:
     slo: 65
+    latency: { p75: 30, p90: 34, p95: 40, p99: 48 }
   media-subgraph:
     slo: 90
+    latency: { p75: 32, p90: 38, p95: 48, p99: 60 }
   user-subgraph:
     slo: 150
+    latency: { p75: 50, p90: 70, p95: 95, p99: 125 }
 
 # Network/LCP overhead — these have reasonable defaults (20ms / 80ms) if omitted
 network_offset_ms: { p50: 15, p75: 20, p90: 25, p99: 40 }
@@ -70,102 +153,71 @@ boundaries:
     render_cost: 6
     lcp_critical: true
     queries:
-      getExperimentContext:
-        ops:
-          experimentation-subgraph: { p50: 28, p90: 35, p99: 50 }
-      getProductInfo:
-        await: false
-        ops:
-          product-subgraph: { p50: 30, p90: 45, p99: 65 }
+      - getExperimentContext
+      - name: getProductInfo
+        prefetch: true
 
     Nav:
       render_cost: 3
       queries:
-        getNavigation:
-          ops:
-            cms-subgraph: { p50: 55, p90: 80, p99: 120 }
+        - getNavigation
 
       CartIndicator:
         csr: true
         render_cost: 2
         queries:
-          getUserCart:
-            ops:
-              user-subgraph: { p50: 50, p90: 80, p99: 130 }
+          - getUserCart
 
     Content:
       render_cost: 2
       queries:
-        getContentLayout:
-          ops:
-            cms-subgraph: { p50: 40, p90: 60, p99: 85 }
+        - getContentLayout
 
       Breadcrumbs:
         render_cost: 2
         queries:
-          getBreadcrumbs:
-            ops:
-              cms-subgraph: { p50: 35, p90: 50, p99: 75 }
+          - getBreadcrumbs
 
       Main.Hero:
         render_cost: 4
         lcp_critical: true
         queries:
-          getHeroImage:
-            ops:
-              media-subgraph: { p50: 30, p90: 38, p99: 55 }
+          - getHeroImage
 
         FavoriteButton:
           csr: true
           render_cost: 1
           queries:
-            getUserFavorites:
-              ops:
-                user-subgraph: { p50: 40, p90: 60, p99: 95 }
+            - getUserFavorites
 
       Main.Thumbnails:
         render_cost: 3
         queries:
-          getThumbnails:
-            ops:
-              media-subgraph: { p50: 40, p90: 55, p99: 70 }
+          - getThumbnails
 
       Main.Title:
         render_cost: 6
         lcp_critical: true
         queries:
-          getProductInfo:
-            ops:
-              product-subgraph:
-                duration: { p50: 30, p90: 45, p99: 65 }
-                cached: true
+          - name: getProductInfo
+            memoized: true
 
       Main.Pricing:
         render_cost: 8
         queries:
-          getProductPricing:
-            ops:
-              pricing-subgraph: { p50: 200, p90: 350, p99: 680 }
-              inventory-subgraph: { p50: 30, p90: 42, p99: 60 }
-              reviews-subgraph: { p50: 35, p90: 50, p99: 70 }
+          - getProductPricing
 
       Main.Bullets:
         render_cost: 3
         queries:
-          getProductInfo:
-            ops:
-              product-subgraph:
-                duration: { p50: 30, p90: 45, p99: 65 }
-                cached: true
+          - name: getProductInfo
+            memoized: true
 
       Main.Options:
         render_cost: 2
         queries:
-          getProductInfo:
-            ops:
-              product-subgraph:
-                duration: { p50: 30, p90: 45, p99: 65 }
-                cached: true
+          - name: getProductInfo
+            memoized: true
 
       Main.AddToCart:
         render_cost: 1
@@ -173,30 +225,20 @@ boundaries:
       Carousels:
         render_cost: 14
         queries:
-          getRecommendations:
-            ops:
-              reco-subgraph: { p50: 120, p90: 180, p99: 310 }
-              product-subgraph: { p50: 40, p90: 60, p99: 85 }
-              pricing-subgraph: { p50: 80, p90: 120, p99: 190 }
+          - getRecommendations
 
       Reviews:
         render_cost: 6
         queries:
-          getReviews:
-            ops:
-              reviews-subgraph: { p50: 200, p90: 350, p99: 680 }
+          - getReviews
 
         ReviewsQA:
           csr: true
           render_cost: 4
           queries:
-            getReviewsQA:
-              ops:
-                reviews-subgraph: { p50: 120, p90: 200, p99: 350 }
+            - getReviewsQA
 
     Footer:
       render_cost: 5
       queries:
-        getFooter:
-          ops:
-            cms-subgraph: { p50: 30, p90: 45, p99: 60 }
+        - getFooter

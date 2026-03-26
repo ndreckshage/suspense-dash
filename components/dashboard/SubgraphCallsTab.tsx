@@ -1,29 +1,23 @@
 "use client";
 
 import { useMemo, useState, useCallback } from "react";
-import type {
-  QueryMetric,
-  SubgraphOperationMetric,
-} from "@/lib/metrics-store";
-import { SUBGRAPHS, type SubgraphName } from "@/lib/gql-federation";
-import { percentile } from "@/lib/percentile";
 import type { MockSubgraphData } from "@/lib/mock-metrics";
 import { buildSubgraphColorMap, DEFAULT_SUBGRAPH_COLOR } from "@/lib/subgraph-colors";
 import { TabDescription } from "./TabDescription";
 import { Tooltip } from "./Tooltip";
 
 interface Props {
-  queries: QueryMetric[];
-  subgraphOps: SubgraphOperationMetric[];
   pctl: number;
-  /** Pre-computed mock data keyed by percentile */
-  mock?: Record<number, MockSubgraphData>;
+  /** Pre-computed data keyed by percentile (from YAML or live conversion) */
+  mock: Record<number, MockSubgraphData>;
 }
 
 interface CallerDetail {
   queryName: string;
   boundary: string;
   isClient: boolean;
+  weight: number;
+  queryLatencyPctl: number;
   durationPctl: number;
 }
 
@@ -31,7 +25,7 @@ interface SubgraphSummary {
   name: string;
   color: string;
   callsPerReq: number;
-  durationPctl: number;
+  subgraphLatencyPctl: number;
   sloMs: number;
   callers: CallerDetail[];
   hasClientCalls: boolean;
@@ -43,13 +37,13 @@ type SortDir = "asc" | "desc";
 
 function getSloSortValue(row: SubgraphSummary): number {
   if (row.sloMs === 0) return -1; // no SLO sorts last
-  const ratio = row.durationPctl / row.sloMs;
+  const ratio = row.subgraphLatencyPctl / row.sloMs;
   if (ratio > 1) return 3;       // exceeded
   if (ratio > 0.8) return 2;     // warning
   return 1;                       // ok
 }
 
-export function SubgraphCallsTab({ queries, subgraphOps, pctl, mock }: Props) {
+export function SubgraphCallsTab({ pctl, mock }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [sloFilter, setSloFilter] = useState<SloFilter>(null);
   const [sortField, setSortField] = useState<SortField>("callsPerReq");
@@ -85,134 +79,47 @@ export function SubgraphCallsTab({ queries, subgraphOps, pctl, mock }: Props) {
     const names = new Set<string>();
     if (mock?.[pctl]) {
       for (const r of mock[pctl].rows) names.add(r.name);
-    } else {
-      for (const op of subgraphOps) names.add(op.subgraphName);
     }
     return buildSubgraphColorMap(names);
-  }, [mock, pctl, subgraphOps]);
+  }, [mock, pctl]);
 
   const { summary, subgraphRows } = useMemo(() => {
-    // Mock data path — use pre-computed values directly
-    if (mock?.[pctl]) {
-      const rows: SubgraphSummary[] = mock[pctl].rows.map((r) => {
-        // Build callers from mock operation details, collecting durations per caller
-        const callerDurations = new Map<string, number[]>();
-        const callerMap = new Map<string, Omit<CallerDetail, "durationPctl">>();
-        for (const op of r.operations) {
-          for (let i = 0; i < op.queryNames.length; i++) {
-            const qn = op.queryNames[i];
-            const bp = op.boundaries[i] ?? op.boundaries[0] ?? "";
-            const key = `${qn}:${bp}`;
-            if (!callerMap.has(key)) {
-              callerMap.set(key, { queryName: qn, boundary: bp, isClient: op.isClient });
-            }
-            const durations = callerDurations.get(key) ?? [];
-            durations.push(op.durationPctl);
-            callerDurations.set(key, durations);
+    if (!mock?.[pctl]) {
+      return { summary: { ssrCallsPerReq: 0, csrCallsPerReq: 0, dedupedPerReq: 0 }, subgraphRows: [] as SubgraphSummary[] };
+    }
+    const rows: SubgraphSummary[] = mock[pctl].rows.map((r) => {
+      const callerMap = new Map<string, CallerDetail>();
+      for (const op of r.operations) {
+        for (let i = 0; i < op.queryNames.length; i++) {
+          const qn = op.queryNames[i];
+          const bp = op.boundaries[i] ?? op.boundaries[0] ?? "";
+          const key = `${qn}:${bp}`;
+          if (!callerMap.has(key)) {
+            callerMap.set(key, {
+              queryName: qn,
+              boundary: bp,
+              isClient: op.isClient,
+              weight: op.weight,
+              queryLatencyPctl: op.queryLatencyPctl,
+              durationPctl: op.durationPctl,
+            });
           }
         }
-        return {
-          name: r.name,
-          color: r.color,
-          callsPerReq: r.callsPerReq,
-          durationPctl: r.durationPctl,
-          sloMs: r.sloMs ?? 0,
-          callers: [...callerMap.entries()].map(([key, c]) => ({
-            ...c,
-            durationPctl: percentile(callerDurations.get(key) ?? [], pctl),
-          })),
-          hasClientCalls: r.operations.length > 0 && r.operations.every((op) => op.isClient),
-        };
-      });
-      return { summary: mock[pctl].summary, subgraphRows: rows };
-    }
-
-    if (subgraphOps.length === 0) {
-      return { summary: { ssrCallsPerReq: 0, csrCallsPerReq: 0, dedupedPerReq: 0 }, subgraphRows: [] };
-    }
-
-    const requestIds = new Set(subgraphOps.map((o) => o.requestId));
-    const numRequests = requestIds.size;
-
-    // Count uncached (actual network calls) and cached (deduped) ops, split by phase
-    let ssrUncached = 0;
-    let csrUncached = 0;
-    let totalCached = 0;
-    for (const op of subgraphOps) {
-      if (op.cached) totalCached++;
-      else if (op.phase === "csr") csrUncached++;
-      else ssrUncached++;
-    }
-
-    const summary = {
-      ssrCallsPerReq: Math.round((ssrUncached / numRequests) * 10) / 10,
-      csrCallsPerReq: Math.round((csrUncached / numRequests) * 10) / 10,
-      dedupedPerReq: Math.round((totalCached / numRequests) * 10) / 10,
-    };
-
-    // Group uncached ops by subgraph
-    const uncachedBySubgraph = new Map<string, SubgraphOperationMetric[]>();
-    const allBySubgraph = new Map<string, SubgraphOperationMetric[]>();
-    for (const op of subgraphOps) {
-      const allList = allBySubgraph.get(op.subgraphName) ?? [];
-      allList.push(op);
-      allBySubgraph.set(op.subgraphName, allList);
-
-      if (!op.cached) {
-        const list = uncachedBySubgraph.get(op.subgraphName) ?? [];
-        list.push(op);
-        uncachedBySubgraph.set(op.subgraphName, list);
       }
-    }
+      return {
+        name: r.name,
+        color: r.color,
+        callsPerReq: r.callsPerReq,
+        subgraphLatencyPctl: r.subgraphLatencyPctl,
+        sloMs: r.sloMs ?? 0,
+        callers: [...callerMap.values()],
+        hasClientCalls: r.operations.length > 0 && r.operations.every((op) => op.isClient),
+      };
+    });
+    return { summary: mock[pctl].summary, subgraphRows: rows };
+  }, [pctl, mock, subgraphColorMap]);
 
-    const subgraphRows: SubgraphSummary[] = [];
-
-    for (const [sgName, sgUncachedOps] of uncachedBySubgraph) {
-      const color = SUBGRAPHS[sgName as SubgraphName]?.color ?? subgraphColorMap.get(sgName) ?? DEFAULT_SUBGRAPH_COLOR;
-      const sloMs = SUBGRAPHS[sgName as SubgraphName]?.sloMs ?? 0;
-      const sgAllOps = allBySubgraph.get(sgName) ?? [];
-
-      // Build unique callers (query + boundary pairs) with per-caller durations
-      const callerBase = new Map<string, Omit<CallerDetail, "durationPctl">>();
-      const callerDurations = new Map<string, number[]>();
-      for (const op of sgAllOps) {
-        const key = `${op.queryName}:${op.boundary_path}`;
-        if (!callerBase.has(key)) {
-          callerBase.set(key, {
-            queryName: op.queryName,
-            boundary: op.boundary_path,
-            isClient: op.phase === "csr",
-          });
-        }
-        if (!op.cached) {
-          const durs = callerDurations.get(key) ?? [];
-          durs.push(op.duration_ms);
-          callerDurations.set(key, durs);
-        }
-      }
-
-      const durations = sgUncachedOps.map((o) => o.duration_ms);
-
-      subgraphRows.push({
-        name: sgName,
-        color,
-        callsPerReq: Math.round((sgUncachedOps.length / numRequests) * 10) / 10,
-        durationPctl: percentile(durations, pctl),
-        sloMs,
-        callers: [...callerBase.entries()].map(([key, c]) => ({
-          ...c,
-          durationPctl: percentile(callerDurations.get(key) ?? [], pctl),
-        })),
-        hasClientCalls: sgAllOps.length > 0 && sgAllOps.every((o) => o.phase === "csr"),
-      });
-    }
-
-    subgraphRows.sort((a, b) => b.callsPerReq - a.callsPerReq);
-
-    return { summary, subgraphRows };
-  }, [subgraphOps, pctl, mock, subgraphColorMap]);
-
-  if (subgraphRows.length === 0 && subgraphOps.length === 0) {
+  if (subgraphRows.length === 0) {
     return (
       <div className="text-center py-12 text-zinc-500">
         No metrics data. Generate load to populate the dashboard.
@@ -224,7 +131,7 @@ export function SubgraphCallsTab({ queries, subgraphOps, pctl, mock }: Props) {
 
   const filteredRows = useMemo(() => {
     let rows = subgraphRows;
-    if (sloFilter === "exceeded") rows = rows.filter((r) => r.sloMs > 0 && r.durationPctl > r.sloMs);
+    if (sloFilter === "exceeded") rows = rows.filter((r) => r.sloMs > 0 && r.subgraphLatencyPctl > r.sloMs);
     else if (sloFilter === "hasSlo") rows = rows.filter((r) => r.sloMs > 0);
     else if (sloFilter === "noSlo") rows = rows.filter((r) => r.sloMs === 0);
 
@@ -238,7 +145,7 @@ export function SubgraphCallsTab({ queries, subgraphOps, pctl, mock }: Props) {
           cmp = a.callsPerReq - b.callsPerReq;
           break;
         case "duration":
-          cmp = a.durationPctl - b.durationPctl;
+          cmp = a.subgraphLatencyPctl - b.subgraphLatencyPctl;
           break;
         case "slo":
           cmp = a.sloMs - b.sloMs;
@@ -253,7 +160,7 @@ export function SubgraphCallsTab({ queries, subgraphOps, pctl, mock }: Props) {
   }, [subgraphRows, sloFilter, sortField, sortDir]);
 
   const sloCounts = useMemo(() => {
-    const exceeded = subgraphRows.filter((r) => r.sloMs > 0 && r.durationPctl > r.sloMs).length;
+    const exceeded = subgraphRows.filter((r) => r.sloMs > 0 && r.subgraphLatencyPctl > r.sloMs).length;
     const noSlo = subgraphRows.filter((r) => r.sloMs === 0).length;
     const hasSlo = subgraphRows.filter((r) => r.sloMs > 0).length;
     return { exceeded, noSlo, hasSlo };
@@ -386,7 +293,7 @@ export function SubgraphCallsTab({ queries, subgraphOps, pctl, mock }: Props) {
             <tr className="text-zinc-500 text-xs border-b border-zinc-800">
               <SortableHeader field="name" label="Subgraph" sortField={sortField} sortDir={sortDir} onSort={toggleSort} align="left" style={{ width: "24%" }} />
               <SortableHeader field="callsPerReq" label="Calls/req" sortField={sortField} sortDir={sortDir} onSort={toggleSort} align="right" style={{ width: "12%" }} />
-              <SortableHeader field="duration" label="Duration" subLabel={pLabel} sortField={sortField} sortDir={sortDir} onSort={toggleSort} align="right" style={{ width: "12%" }} />
+              <SortableHeader field="duration" label="Subgraph Latency" subLabel={pLabel} sortField={sortField} sortDir={sortDir} onSort={toggleSort} align="right" style={{ width: "12%" }} />
               <SortableHeader field="slo" label="SLO" sortField={sortField} sortDir={sortDir} onSort={toggleSort} align="right" style={{ width: "10%" }} />
               <SortableHeader field="status" label="Status" sortField={sortField} sortDir={sortDir} onSort={toggleSort} align="center" style={{ width: "8%" }} />
               <th className="py-2 px-2 font-normal text-left text-zinc-600" style={{ width: "34%" }}>
@@ -398,7 +305,7 @@ export function SubgraphCallsTab({ queries, subgraphOps, pctl, mock }: Props) {
             {filteredRows.map((row) => {
               const isExpanded = expanded.has(row.name);
               const hasSlo = row.sloMs > 0;
-              const sloRatio = hasSlo ? row.durationPctl / row.sloMs : 0;
+              const sloRatio = hasSlo ? row.subgraphLatencyPctl / row.sloMs : 0;
               const statusColor = !hasSlo
                 ? "text-amber-500"
                 : sloRatio > 1
@@ -476,7 +383,7 @@ function SubgraphRow({
           </div>
         </td>
         <td className="text-right py-1.5 px-2 text-zinc-300 font-medium">{row.callsPerReq}</td>
-        <td className="text-right py-1.5 px-2 text-zinc-300">{row.durationPctl}ms</td>
+        <td className="text-right py-1.5 px-2 text-zinc-300">{row.subgraphLatencyPctl}ms</td>
         <td className={`text-right py-1.5 px-2 ${hasSlo ? "text-zinc-500" : "text-amber-500/70 italic"}`}>
           {hasSlo ? `${row.sloMs}ms` : "none"}
         </td>
@@ -528,7 +435,9 @@ function SubgraphRow({
               </Tooltip>
             </td>
             <td className="text-right py-1 px-2 text-zinc-500 text-xs">
-              {caller.durationPctl > 0 ? `${caller.durationPctl}ms` : ""}
+              {caller.weight > 0
+                ? `${caller.weight} (${Math.round(caller.weight * caller.queryLatencyPctl)}/${caller.queryLatencyPctl}ms)`
+                : caller.durationPctl > 0 ? `${caller.durationPctl}ms` : ""}
             </td>
             <td colSpan={3} />
           </tr>
