@@ -493,20 +493,30 @@ export function BoundaryTreeTable({ pctl, mock }: Props) {
         <thead>
           <tr className="text-zinc-500 text-xs border-b border-zinc-800">
             <th className="text-left py-2 px-2 font-normal" style={{ width: "35%" }}>
-              Boundary / Query / Subgraph
+              <Tooltip content="React Suspense boundary hierarchy: boundaries → GraphQL queries → subgraph operations">
+                <span>Boundary / Query / Subgraph</span>
+              </Tooltip>
             </th>
             <th className="text-right py-2 px-2 font-normal" style={{ width: "13%" }}>
-              Query Latency
-              <br />
-              <span className="text-zinc-600">{pLabel}</span>
+              <Tooltip content="End-to-end query latency at this percentile. For subgraph ops, shows the weighted portion (weight × query latency).">
+                <span>Query Latency<br /><span className="text-zinc-600">{pLabel}</span></span>
+              </Tooltip>
             </th>
             <th className="text-right py-2 px-2 font-normal" style={{ width: "13%" }}>
-              Subgraph Latency
-              <br />
-              <span className="text-zinc-600">{pLabel}</span>
+              <Tooltip content="Service-wide latency for this subgraph at the selected percentile — independent of any specific query.">
+                <span>Subgraph Latency<br /><span className="text-zinc-600">{pLabel}</span></span>
+              </Tooltip>
             </th>
-            <th className="text-right py-2 px-2 font-normal" style={{ width: "12%" }}>SLO</th>
-            <th className="text-center py-2 px-2 font-normal" style={{ width: "10%" }}>Status</th>
+            <th className="text-right py-2 px-2 font-normal" style={{ width: "12%" }}>
+              <Tooltip content="Service-level objective. Query rows show the query SLO; subgraph rows show the subgraph service SLO.">
+                <span>SLO</span>
+              </Tooltip>
+            </th>
+            <th className="text-center py-2 px-2 font-normal" style={{ width: "10%" }}>
+              <Tooltip content="SLO status: OK = within budget, !! = warning (>80%), !!! = exceeded, ? = no SLO defined.">
+                <span>Status</span>
+              </Tooltip>
+            </th>
           </tr>
         </thead>
         <tbody>

@@ -291,13 +291,15 @@ export function SubgraphCallsTab({ pctl, mock }: Props) {
         <table className="w-full text-sm font-mono table-fixed" style={{ minWidth: "500px" }}>
           <thead>
             <tr className="text-zinc-500 text-xs border-b border-zinc-800">
-              <SortableHeader field="name" label="Subgraph" sortField={sortField} sortDir={sortDir} onSort={toggleSort} align="left" style={{ width: "24%" }} />
-              <SortableHeader field="callsPerReq" label="Calls/req" sortField={sortField} sortDir={sortDir} onSort={toggleSort} align="right" style={{ width: "12%" }} />
-              <SortableHeader field="duration" label="Subgraph Latency" subLabel={pLabel} sortField={sortField} sortDir={sortDir} onSort={toggleSort} align="right" style={{ width: "12%" }} />
-              <SortableHeader field="slo" label="SLO" sortField={sortField} sortDir={sortDir} onSort={toggleSort} align="right" style={{ width: "10%" }} />
-              <SortableHeader field="status" label="Status" sortField={sortField} sortDir={sortDir} onSort={toggleSort} align="center" style={{ width: "8%" }} />
+              <SortableHeader field="name" label="Subgraph" tooltip="Backend service (subgraph) in the federated GraphQL architecture." sortField={sortField} sortDir={sortDir} onSort={toggleSort} align="left" style={{ width: "24%" }} />
+              <SortableHeader field="callsPerReq" label="Calls/req" tooltip="Number of uncached network calls to this subgraph per page load. Memoized (React cache dedup) calls are excluded." sortField={sortField} sortDir={sortDir} onSort={toggleSort} align="right" style={{ width: "12%" }} />
+              <SortableHeader field="duration" label="Subgraph Latency" subLabel={pLabel} tooltip="Service-wide response time for this subgraph at the selected percentile." sortField={sortField} sortDir={sortDir} onSort={toggleSort} align="right" style={{ width: "12%" }} />
+              <SortableHeader field="slo" label="SLO" tooltip="Service-level objective for this subgraph's response time." sortField={sortField} sortDir={sortDir} onSort={toggleSort} align="right" style={{ width: "10%" }} />
+              <SortableHeader field="status" label="Status" tooltip="SLO status: OK = within budget, !! = warning (>80%), !!! = exceeded, ? = no SLO defined." sortField={sortField} sortDir={sortDir} onSort={toggleSort} align="center" style={{ width: "8%" }} />
               <th className="py-2 px-2 font-normal text-left text-zinc-600" style={{ width: "34%" }}>
-                Calls/req distribution
+                <Tooltip content="Visual comparison of call volume across subgraphs.">
+                  <span>Calls/req distribution</span>
+                </Tooltip>
               </th>
             </tr>
           </thead>
@@ -451,6 +453,7 @@ function SortableHeader({
   field,
   label,
   subLabel,
+  tooltip,
   sortField,
   sortDir,
   onSort,
@@ -460,6 +463,7 @@ function SortableHeader({
   field: SortField;
   label: string;
   subLabel?: string;
+  tooltip?: string;
   sortField: SortField;
   sortDir: SortDir;
   onSort: (f: SortField) => void;
@@ -469,12 +473,8 @@ function SortableHeader({
   const active = sortField === field;
   const arrow = active ? (sortDir === "asc" ? " \u25B4" : " \u25BE") : "";
   const textAlign = align === "left" ? "text-left" : align === "right" ? "text-right" : "text-center";
-  return (
-    <th
-      className={`${textAlign} py-2 px-2 font-normal cursor-pointer select-none hover:text-zinc-300 transition-colors ${active ? "text-zinc-300" : ""}`}
-      style={style}
-      onClick={() => onSort(field)}
-    >
+  const inner = (
+    <span>
       {label}{arrow}
       {subLabel && (
         <>
@@ -482,6 +482,15 @@ function SortableHeader({
           <span className="text-zinc-600">{subLabel}</span>
         </>
       )}
+    </span>
+  );
+  return (
+    <th
+      className={`${textAlign} py-2 px-2 font-normal cursor-pointer select-none hover:text-zinc-300 transition-colors ${active ? "text-zinc-300" : ""}`}
+      style={style}
+      onClick={() => onSort(field)}
+    >
+      {tooltip ? <Tooltip content={tooltip}>{inner}</Tooltip> : inner}
     </th>
   );
 }
