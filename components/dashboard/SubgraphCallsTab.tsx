@@ -164,11 +164,14 @@ export function SubgraphCallsTab({ pctl, mock, lcpSubgraphs }: Props) {
   }, [subgraphRows, lcpFilter, lcpSubgraphs, sloFilter, sortField, sortDir]);
 
   const sloCounts = useMemo(() => {
-    const exceeded = subgraphRows.filter((r) => r.sloMs > 0 && r.subgraphLatencyPctl > r.sloMs).length;
-    const noSlo = subgraphRows.filter((r) => r.sloMs === 0).length;
-    const hasSlo = subgraphRows.filter((r) => r.sloMs > 0).length;
+    const base = lcpFilter && lcpSubgraphs
+      ? subgraphRows.filter((r) => lcpSubgraphs.has(r.name))
+      : subgraphRows;
+    const exceeded = base.filter((r) => r.sloMs > 0 && r.subgraphLatencyPctl > r.sloMs).length;
+    const noSlo = base.filter((r) => r.sloMs === 0).length;
+    const hasSlo = base.filter((r) => r.sloMs > 0).length;
     return { exceeded, noSlo, hasSlo };
-  }, [subgraphRows]);
+  }, [subgraphRows, lcpFilter, lcpSubgraphs]);
 
   const allExpanded = filteredRows.length > 0 && filteredRows.every((r) => expanded.has(r.name));
   const allCollapsed = expanded.size === 0;
