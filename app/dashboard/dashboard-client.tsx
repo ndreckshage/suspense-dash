@@ -135,6 +135,39 @@ export function DashboardClient({
     return null;
   }, [yamlData, metrics]);
 
+  // Compute LCP-path subgraph names from tree data (for subgraph tab filter)
+  const lcpSubgraphs = useMemo(() => {
+    if (!mockData) return new Set<string>();
+    const treeData = mockData.tree[pctl];
+    if (!treeData) return new Set<string>();
+    const nodes = treeData.nodes;
+
+    // Find LCP boundary paths + ancestors
+    const lcpPaths = new Set<string>();
+    for (const n of nodes) {
+      if (n.lcpCritical) lcpPaths.add(n.boundaryPath);
+    }
+    const withAncestors = new Set(lcpPaths);
+    for (const path of lcpPaths) {
+      let candidate = path;
+      while (true) {
+        const idx = candidate.lastIndexOf(".");
+        if (idx === -1) break;
+        candidate = candidate.substring(0, idx);
+        withAncestors.add(candidate);
+      }
+    }
+
+    // Collect subgraph names from non-prefetch ops in LCP boundaries
+    const names = new Set<string>();
+    for (const n of nodes) {
+      if (n.type === "subgraph-op" && n.subgraphName && !n.prefetch && withAncestors.has(n.boundaryPath)) {
+        names.add(n.subgraphName);
+      }
+    }
+    return names;
+  }, [mockData, pctl]);
+
   const hasData = mockData !== null;
 
   return (
@@ -297,6 +330,7 @@ export function DashboardClient({
             <SubgraphCallsTab
               pctl={pctl}
               mock={mockData!.subgraphs}
+              lcpSubgraphs={lcpSubgraphs}
             />
           )}
         </div>
