@@ -324,6 +324,19 @@ export function SubgraphCallsTab({ pctl, mock, lcpSubgraphs }: Props) {
             </tr>
           </thead>
           <tbody>
+            {filteredRows.length === 0 && (
+              <tr>
+                <td colSpan={6} className="text-center py-8 text-zinc-500">
+                  <p>No results match the current filters.</p>
+                  <button
+                    onClick={() => { setSloFilter(null); setLcpFilter(false); }}
+                    className="mt-2 text-blue-400 hover:text-blue-300 underline text-sm"
+                  >
+                    Clear all filters
+                  </button>
+                </td>
+              </tr>
+            )}
             {filteredRows.map((row) => {
               const isExpanded = expanded.has(row.name);
               const hasSlo = row.sloMs > 0;
